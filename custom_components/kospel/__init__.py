@@ -3,11 +3,10 @@ from __future__ import annotations
 
 import logging
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform
+from homeassistant.const import Platform, CONF_HOST, CONF_PORT, CONF_USERNAME, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import DOMAIN
+from .const import DOMAIN, CONF_SLAVE_ID
 from .coordinator import KospelDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -21,17 +20,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     hass.data.setdefault(DOMAIN, {})
     
-    # Create HTTP session
-    session = async_get_clientsession(hass)
-    
     # Create data update coordinator
     coordinator = KospelDataUpdateCoordinator(
         hass=hass,
-        session=session,
-        host=entry.data["host"],
-        port=entry.data.get("port", 80),
-        username=entry.data.get("username"),
-        password=entry.data.get("password"),
+        host=entry.data[CONF_HOST],
+        port=entry.data.get(CONF_PORT, 502),
+        slave_id=entry.data.get(CONF_SLAVE_ID, 1),
+        username=entry.data.get(CONF_USERNAME),
+        password=entry.data.get(CONF_PASSWORD),
     )
     
     # Fetch initial data so we have data when entities subscribe

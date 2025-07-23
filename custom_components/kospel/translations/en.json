@@ -6,7 +6,8 @@
         "description": "Configure your Kospel electric heater",
         "data": {
           "host": "Host",
-          "port": "Port",
+          "port": "Port (Modbus TCP)",
+          "slave_id": "Slave ID", 
           "username": "Username (optional)",
           "password": "Password (optional)"
         }

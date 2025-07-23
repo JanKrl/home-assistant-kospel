@@ -7,7 +7,6 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-import aiohttp
 
 from .api import KospelAPI, KospelAPIError
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
@@ -21,9 +20,9 @@ class KospelDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def __init__(
         self,
         hass: HomeAssistant,
-        session: aiohttp.ClientSession,
         host: str,
-        port: int = 80,
+        port: int = 502,
+        slave_id: int = 1,
         username: str | None = None,
         password: str | None = None,
     ) -> None:
@@ -36,9 +35,9 @@ class KospelDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         
         self.api = KospelAPI(
-            session=session,
             host=host,
             port=port,
+            slave_id=slave_id,
             username=username,
             password=password,
         )

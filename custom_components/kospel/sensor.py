@@ -34,6 +34,10 @@ async def async_setup_entry(
         KospelTargetTemperatureSensor(coordinator, config_entry),
         KospelPowerSensor(coordinator, config_entry),
         KospelModeSensor(coordinator, config_entry),
+        KospelWaterTemperatureSensor(coordinator, config_entry),
+        KospelWaterHeatingSensor(coordinator, config_entry),
+        KospelHeaterStatusSensor(coordinator, config_entry),
+        KospelErrorCodeSensor(coordinator, config_entry),
     ]
     async_add_entities(entities)
 
@@ -173,3 +177,138 @@ class KospelModeSensor(KospelSensorBase):
         
         status = self.coordinator.data.get("status", {})
         return status.get("mode")
+
+
+class KospelWaterTemperatureSensor(KospelSensorBase):
+    """Sensor for water heating temperature."""
+
+    _attr_name = "Water Temperature"
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+
+    def __init__(
+        self,
+        coordinator: KospelDataUpdateCoordinator,
+        config_entry: ConfigEntry,
+    ) -> None:
+        """Initialize the water temperature sensor."""
+        super().__init__(coordinator, config_entry, "water_temperature")
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the water temperature."""
+        if not self.coordinator.data:
+            return None
+        
+        status = self.coordinator.data.get("status", {})
+        return status.get("water_temperature")
+
+
+class KospelWaterHeatingSensor(KospelSensorBase):
+    """Sensor for water heating status."""
+
+    _attr_name = "Water Heating"
+    _attr_icon = "mdi:water-thermometer"
+    _attr_device_class = SensorDeviceClass.RUNNING
+
+    def __init__(
+        self,
+        coordinator: KospelDataUpdateCoordinator,
+        config_entry: ConfigEntry,
+    ) -> None:
+        """Initialize the water heating sensor."""
+        super().__init__(coordinator, config_entry, "water_heating")
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the water heating status."""
+        if not self.coordinator.data:
+            return None
+        
+        status = self.coordinator.data.get("status", {})
+        return "on" if status.get("water_heating") else "off"
+
+    @property
+    def icon(self) -> str:
+        """Return the icon."""
+        if not self.coordinator.data:
+            return "mdi:water-thermometer-outline"
+        
+        status = self.coordinator.data.get("status", {})
+        if status.get("water_heating"):
+            return "mdi:water-thermometer"
+        return "mdi:water-thermometer-outline"
+
+
+class KospelHeaterStatusSensor(KospelSensorBase):
+    """Sensor for heater running status."""
+
+    _attr_name = "Heater Running"
+    _attr_icon = "mdi:heating-coil"
+    _attr_device_class = SensorDeviceClass.RUNNING
+
+    def __init__(
+        self,
+        coordinator: KospelDataUpdateCoordinator,
+        config_entry: ConfigEntry,
+    ) -> None:
+        """Initialize the heater status sensor."""
+        super().__init__(coordinator, config_entry, "heater_running")
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the heater running status."""
+        if not self.coordinator.data:
+            return None
+        
+        status = self.coordinator.data.get("status", {})
+        return "on" if status.get("heater_running") else "off"
+
+    @property
+    def icon(self) -> str:
+        """Return the icon."""
+        if not self.coordinator.data:
+            return "mdi:heating-coil"
+        
+        status = self.coordinator.data.get("status", {})
+        if status.get("heater_running"):
+            return "mdi:heating-coil"
+        return "mdi:radiator-off"
+
+
+class KospelErrorCodeSensor(KospelSensorBase):
+    """Sensor for error codes."""
+
+    _attr_name = "Error Code"
+    _attr_icon = "mdi:alert-circle"
+    _attr_entity_category = "diagnostic"
+
+    def __init__(
+        self,
+        coordinator: KospelDataUpdateCoordinator,
+        config_entry: ConfigEntry,
+    ) -> None:
+        """Initialize the error code sensor."""
+        super().__init__(coordinator, config_entry, "error_code")
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the error code."""
+        if not self.coordinator.data:
+            return None
+        
+        status = self.coordinator.data.get("status", {})
+        return status.get("error_code", 0)
+
+    @property
+    def icon(self) -> str:
+        """Return the icon."""
+        if not self.coordinator.data:
+            return "mdi:check-circle"
+        
+        status = self.coordinator.data.get("status", {})
+        error_code = status.get("error_code", 0)
+        if error_code == 0:
+            return "mdi:check-circle"
+        return "mdi:alert-circle"
