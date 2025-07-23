@@ -1,8 +1,5 @@
 {
   "name": "Kospel Electric Heaters",
   "hacs": "1.6.0",
-  "domains": ["climate", "sensor"],
-  "iot_class": "Local Polling",
-  "homeassistant": "2023.1.0",
-  "topics": ["kospel", "heating", "climate", "modbus", "home-assistant", "hacs"]
+  "homeassistant": "2023.1.0"
 }
