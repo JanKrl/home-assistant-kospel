@@ -4,6 +4,18 @@
 [![GitHub release](https://img.shields.io/github/release/username/ha-kospel-integration.svg)](https://github.com/username/ha-kospel-integration/releases)
 [![GitHub license](https://img.shields.io/github/license/username/ha-kospel-integration.svg)](https://github.com/username/ha-kospel-integration/blob/main/LICENSE)
 
+> [!WARNING]
+> **🚧 UNDER ACTIVE DEVELOPMENT 🚧**
+> 
+> This integration is currently in **experimental stage** and under active development. Use at your own risk!
+> 
+> - ⚠️ **Not tested with real hardware yet**
+> - ⚠️ **Modbus register addresses may be incorrect**
+> - ⚠️ **Breaking changes may occur without notice** 
+> - ⚠️ **No warranty or support guarantees**
+> 
+> **For developers and testers only!** Production use is not recommended at this time.
+
 A Home Assistant integration for Kospel electric heaters that allows you to monitor and control your heating devices via Modbus TCP protocol using the C.MI internet module.
 
 ## Features
@@ -17,6 +29,15 @@ A Home Assistant integration for Kospel electric heaters that allows you to moni
 - 🏠 Full Home Assistant integration with entities
 
 ## Installation
+
+> [!WARNING]
+> **READ ALL WARNINGS ABOVE BEFORE INSTALLING**
+> 
+> Only install if you:
+> - Are a developer/tester
+> - Understand the risks
+> - Have Kospel C.MI hardware for testing
+> - Can troubleshoot Modbus issues
 
 ### HACS (Recommended)
 
@@ -85,23 +106,56 @@ The integration uses **Modbus TCP** protocol to communicate with Kospel heaters 
 
 ## Development Status
 
-This integration is currently in active development. Features are being implemented incrementally:
+> [!CAUTION]
+> **EXPERIMENTAL SOFTWARE - USE WITH CAUTION**
 
-- ✅ Basic project structure with HACS support
-- ✅ Modbus TCP communication protocol
-- ✅ Temperature reading and control
-- ✅ Water heating monitoring and control
-- ✅ Operating mode control
-- ✅ Status monitoring (heater running, power, errors)
-- ⏳ Advanced features and configuration options
-- ⏳ Multi-zone support
-- ⏳ Energy monitoring and statistics
+This integration is currently in **experimental development phase**. Implementation status:
+
+### ✅ **Completed (Theoretical)**
+- Basic project structure with HACS support
+- Modbus TCP communication protocol implementation
+- Temperature reading and control logic
+- Water heating monitoring and control logic
+- Operating mode control implementation
+- Status monitoring (heater running, power, errors)
+
+### ⚠️ **CRITICAL LIMITATIONS**
+- **NOT TESTED** with real Kospel C.MI hardware
+- **UNKNOWN** if Modbus register addresses are correct
+- **NO VALIDATION** of actual device communication
+- **POTENTIAL** for device damage if registers are wrong
+
+### 🚧 **In Development**
+- Hardware testing and validation
+- Register address verification
+- Error handling improvements
+- Advanced features and configuration options
+- Multi-zone support
+- Energy monitoring and statistics
+
+### 🎯 **Testing Needed**
+- Real Kospel C.MI hardware validation
+- Modbus register mapping verification
+- Temperature control testing
+- Water heating control testing
+- Error condition handling
 
 ## Important Notes
 
-⚠️ **Protocol Implementation**: The Modbus register addresses used in this integration are based on common heating system implementations and research. Since official Kospel C.MI Modbus documentation was not publicly available, the actual register addresses may need adjustment based on your specific device.
+> [!IMPORTANT]
+> **DISCLAIMER: USE AT YOUR OWN RISK**
+
+⚠️ **Protocol Implementation**: The Modbus register addresses used in this integration are **ESTIMATED** based on common heating system implementations and research. Since official Kospel C.MI Modbus documentation was not publicly available, the actual register addresses may need adjustment based on your specific device.
+
+⚠️ **Potential Risks**: Incorrect Modbus commands could potentially damage your heating system. The authors are not responsible for any damage caused by using this integration.
 
 🔧 **For Developers**: If you have access to official Kospel C.MI Modbus documentation or have successfully tested this integration, please contribute by opening issues or pull requests with correct register mappings.
+
+📋 **Before Using**: 
+- Backup your heater settings
+- Test in a safe environment first
+- Monitor system behavior closely
+- Have alternative heating methods available
 
 ## Contributing
 
