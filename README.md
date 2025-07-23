@@ -32,8 +32,9 @@ A Home Assistant integration for Kospel electric heaters that allows you to moni
 ### Manual Installation
 
 1. Download the latest release from the [releases page](https://github.com/username/ha-kospel-integration/releases)
-2. Extract the files to your `custom_components/kospel` directory
-3. Restart Home Assistant
+2. Create a directory called `kospel` in your `custom_components` folder
+3. Extract all Python files (`*.py`), `manifest.json`, `strings.json`, and `translations/` folder to `custom_components/kospel/`
+4. Restart Home Assistant
 
 ## Configuration
 

@@ -10,8 +10,9 @@ Thank you for your interest in contributing to this project! This guide will hel
 
 ## Code Structure
 
+### Repository Structure (for HACS)
 ```
-custom_components/kospel/
+/
 ├── __init__.py          # Integration entry point
 ├── manifest.json        # Integration metadata
 ├── config_flow.py      # Configuration UI flow
@@ -21,7 +22,26 @@ custom_components/kospel/
 ├── climate.py          # Climate entity platform
 ├── sensor.py           # Sensor entities platform
 ├── strings.json        # UI strings
-└── translations/       # Localization files
+├── translations/       # Localization files
+│   └── en.json
+├── hacs.json           # HACS configuration
+├── README.md           # Documentation
+└── info.md             # HACS info
+```
+
+### Installation Structure (in Home Assistant)
+```
+custom_components/kospel/
+├── __init__.py
+├── manifest.json
+├── config_flow.py
+├── const.py
+├── api.py
+├── coordinator.py
+├── climate.py
+├── sensor.py
+├── strings.json
+└── translations/
     └── en.json
 ```
 
