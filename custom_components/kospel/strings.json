@@ -1,0 +1,33 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Kospel Electric Heater",
+        "description": "Configure your Kospel electric heater",
+        "data": {
+          "host": "Host",
+          "port": "Port (Modbus TCP)",
+          "slave_id": "Slave ID",
+          "username": "Username (optional)",
+          "password": "Password (optional)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the device",
+      "invalid_auth": "Invalid authentication",
+      "unknown": "Unexpected error occurred"
+    },
+    "abort": {
+      "already_configured": "Device is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Kospel Electric Heater Options",
+        "description": "Configure options for your Kospel electric heater"
+      }
+    }
+  }
+}
