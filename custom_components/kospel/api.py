@@ -72,19 +72,22 @@ class KospelAPI:
             
             # Try the new EKD API first, fall back to old API if needed
             try:
-                _LOGGER.debug("Attempting EKD API call...")
+                _LOGGER.info("Attempting EKD API call to discover device capabilities...")
                 ekd_data = await self._get_ekd_data()
                 if ekd_data:
-                    _LOGGER.info("Successfully retrieved EKD API data with %d variables", len(ekd_data))
+                    _LOGGER.info("✅ SUCCESS: EKD API active with %d variables", len(ekd_data))
                     return self._parse_ekd_status(ekd_data)
                 else:
-                    _LOGGER.warning("EKD API returned empty data, falling back to legacy API")
+                    _LOGGER.warning("⚠️ EKD API returned empty data, falling back to legacy API")
             except Exception as exc:
-                _LOGGER.warning("EKD API failed, falling back to legacy API: %s", exc)
+                _LOGGER.warning("❌ EKD API failed: %s", exc)
+                _LOGGER.warning("🔄 Falling back to legacy register API")
                 _LOGGER.debug("EKD API error details:", exc_info=True)
             
             # Fallback to legacy register API
+            _LOGGER.info("📡 Using legacy register API")
             registers = await self._get_device_registers()
+            _LOGGER.info("✅ Legacy API retrieved %d registers", len(registers))
             
             # Parse register values based on the manufacturer's frontend analysis
             # CO = Central heating (Centralne Ogrzewanie)
@@ -96,17 +99,17 @@ class KospelAPI:
             
             status_data = {
                 # Temperature readings
-                "current_temperature": self._parse_temperature(registers.get("0c1c", "0000"), "0c1c"),
-                "target_temperature_co": self._parse_temperature(registers.get("0bb8", "0000"), "0bb8"),  # CO set temp
-                "target_temperature_cwu": self._parse_temperature(registers.get("0bb9", "0000"), "0bb9"),  # CWU set temp
-                "water_temperature": self._parse_temperature(registers.get("0c1d", "0000"), "0c1d"),
-                "outside_temperature": self._parse_temperature(registers.get("0c1e", "0000"), "0c1e"),
-                "return_temperature": self._parse_temperature(registers.get("0c1f", "0000"), "0c1f"),
+                "current_temperature": self._parse_temperature_legacy(registers.get("0c1c", "0000"), "0c1c"),
+                "target_temperature_co": self._parse_temperature_legacy(registers.get("0bb8", "0000"), "0bb8"),  # CO set temp
+                "target_temperature_cwu": self._parse_temperature_legacy(registers.get("0bb9", "0000"), "0bb9"),  # CWU set temp
+                "water_temperature": self._parse_temperature_legacy(registers.get("0c1d", "0000"), "0c1d"),
+                "outside_temperature": self._parse_temperature_legacy(registers.get("0c1e", "0000"), "0c1e"),
+                "return_temperature": self._parse_temperature_legacy(registers.get("0c1f", "0000"), "0c1f"),
                 
                 # Status indicators
-                "heater_running": self._parse_boolean(registers.get("0b30", "0000")),
-                "water_heating": self._parse_boolean(registers.get("0b32", "0000")),
-                "pump_running": self._parse_boolean(registers.get("0b31", "0000")),
+                "heater_running": self._parse_boolean_legacy(registers.get("0b30", "0000")),
+                "water_heating": self._parse_boolean_legacy(registers.get("0b32", "0000")),
+                "pump_running": self._parse_boolean_legacy(registers.get("0b31", "0000")),
                 
                 # Operating parameters
                 "mode": self._parse_mode(registers.get("0b89", "0000")),
@@ -114,7 +117,7 @@ class KospelAPI:
                 "error_code": self._parse_error(registers.get("0b62", "0000")),
                 
                 # Use the CO temperature as the primary target for Home Assistant compatibility
-                "target_temperature": self._parse_temperature(registers.get("0bb8", "0000"), "0bb8"),
+                "target_temperature": self._parse_temperature_legacy(registers.get("0bb8", "0000"), "0bb8"),
                 
                 "last_update": asyncio.get_event_loop().time(),
                 "raw_registers": registers,  # Include raw data for debugging
@@ -382,104 +385,74 @@ class KospelAPI:
         
         return mode_map.get(mode_value, f"mode_{mode_value}")
 
-    def _parse_temperature(self, hex_value: str, register_addr: str = "") -> float | None:
-        """Parse temperature from hex register value.
+    def _parse_temperature_legacy(self, hex_value: str, register_addr: str = "") -> float | None:
+        """Parse temperature from hex register value using manufacturer's regToInt method.
         
-        Different register ranges may use different encoding methods.
+        Based on JavaScript function:
+        function regToInt(reg) {
+            var temp = parseInt(reg.substring(2) + reg.substring(-2, 2), 16);
+            if((temp & 0x8000) > 0) { temp = temp - 0x10000; }
+            return temp;
+        }
         """
         try:
-            # Convert hex to integer
-            value = int(hex_value, 16)
-            if value == 0xFFFF:  # Invalid/not available
+            if not hex_value or hex_value == "0000" or hex_value == "FFFF":
                 return None
             
-            # Determine parsing method based on register address range
-            if register_addr:
-                addr_int = int(register_addr, 16)
-                
-                # 0x0c1c-0x0c1f range: Current/measured temperatures (use LE/10)
-                if 0x0c1c <= addr_int <= 0x0c1f:
-                    little_endian = ((value & 0xFF) << 8) | ((value >> 8) & 0xFF)
-                    temperature = little_endian / 10.0
-                    _LOGGER.debug("Temperature parsing (measured) for %s@%s: LE %d → %.1f°C", 
-                                 hex_value, register_addr, little_endian, temperature)
-                    return temperature
-                
-                # 0x0bb8-0x0bb9 range: Target/setpoint temperatures
-                # These might be encoded differently or be indices
-                elif 0x0bb8 <= addr_int <= 0x0bb9:
-                    # Try multiple methods for target temperatures
-                    methods = []
-                    
-                    # Method 1: Little-endian / 10
-                    le_value = ((value & 0xFF) << 8) | ((value >> 8) & 0xFF)
-                    methods.append(("LE/10", le_value / 10.0))
-                    
-                    # Method 2: Big-endian / 10  
-                    methods.append(("BE/10", value / 10.0))
-                    
-                    # Method 3: High byte as main temperature
-                    high_byte = (value >> 8) & 0xFF
-                    low_byte = value & 0xFF
-                    if high_byte > 0 and high_byte < 100:  # Reasonable temperature range
-                        methods.append(("HB", float(high_byte)))
-                    
-                    # Method 4: Low byte as main temperature  
-                    if low_byte > 0 and low_byte < 100:  # Reasonable temperature range
-                        methods.append(("LB", float(low_byte)))
-                    
-                    # Method 5: Check if it's an index (values like 7°C might be stored as index)
-                    # Common heating setpoints: 5, 6, 7, 8, 9, 10, etc.
-                    if value in range(50, 150):  # 5.0-15.0°C range encoded as 50-150
-                        methods.append(("INDEX/10", value / 10.0))
-                    
-                    # For now, log all methods and use the most reasonable one
-                    _LOGGER.warning("Target temperature parsing for %s@%s (value=%d):", 
-                                   hex_value, register_addr, value)
-                    for method_name, temp in methods:
-                        _LOGGER.warning("  %s: %.1f°C", method_name, temp)
-                    
-                    # Use the first reasonable method (5-30°C range)
-                    for method_name, temp in methods:
-                        if 5.0 <= temp <= 30.0:
-                            _LOGGER.warning("  → Using %s: %.1f°C", method_name, temp)
-                            return temp
-                    
-                    # If no reasonable method found, use LE/10 as fallback
-                    temperature = le_value / 10.0
-                    _LOGGER.warning("  → Using fallback LE/10: %.1f°C", temperature)
-                    return temperature
+            # Apply the exact regToInt algorithm from manufacturer's frontend
+            # 1. Little-endian byte swap: reg.substring(2) + reg.substring(-2, 2)
+            if len(hex_value) == 4:
+                swapped = hex_value[2:4] + hex_value[0:2]
+            else:
+                swapped = hex_value
             
-            # Default method for unknown registers: Little-endian / 10
-            little_endian = ((value & 0xFF) << 8) | ((value >> 8) & 0xFF)
-            temperature = little_endian / 10.0
+            # 2. Parse as hex to integer
+            temp = int(swapped, 16)
             
-            _LOGGER.debug("Temperature parsing (default) for %s: LE %d → %.1f°C", 
-                         hex_value, little_endian, temperature)
+            # 3. Convert to signed integer (two's complement)
+            if (temp & 0x8000) > 0:
+                temp = temp - 0x10000
+            
+            # 4. Divide by 10 for temperature (0.1°C resolution)
+            temperature = temp / 10.0
+            
+            _LOGGER.debug("Temperature parsing (regToInt) for %s@%s: %s → %s → %d → %.1f°C", 
+                         hex_value, register_addr, hex_value, swapped, temp, temperature)
+            
             return temperature
             
         except (ValueError, TypeError):
+            _LOGGER.warning("Failed to parse temperature %s: invalid format", hex_value)
             return None
 
-    def _parse_boolean(self, hex_value: str) -> bool:
-        """Parse boolean from hex register value."""
+    def _parse_boolean_legacy(self, hex_value: str) -> bool:
+        """Parse boolean from hex register value using manufacturer's bit logic.
+        
+        Based on JavaScript functions getBit() and regToInt().
+        The manufacturer uses little-endian byte swapping then checks bits.
+        """
         try:
-            value = int(hex_value, 16)
+            if not hex_value or hex_value == "0000":
+                return False
             
-            # Based on register analysis, the pattern is:
-            # Check if LOW BYTE is non-zero
-            # Examples:
-            # 0100 (OFF) → low_byte = 0x00 → False ✓
-            # 4600 (OFF) → low_byte = 0x00 → False ✓
-            # xxxx01 (ON) → low_byte = 0x01 → True ✓
+            # Apply the same byte swapping as regToInt
+            if len(hex_value) == 4:
+                swapped = hex_value[2:4] + hex_value[0:2]
+            else:
+                swapped = hex_value
             
-            low_byte = value & 0xFF
-            result = low_byte != 0
+            value = int(swapped, 16)
             
-            _LOGGER.debug("Boolean parsing for %s: low_byte=%02X → %s", hex_value, low_byte, result)
+            # Check if any bit is set (manufacturer typically uses bit 0 or low byte)
+            # Based on user's examples: 0100 → False, non-zero → True
+            result = value != 0
+            
+            _LOGGER.debug("Boolean parsing (regToInt+bit) for %s: %s → %d → %s", 
+                         hex_value, swapped, value, result)
             return result
             
         except (ValueError, TypeError):
+            _LOGGER.warning("Failed to parse boolean %s: invalid format", hex_value)
             return False
 
     def _parse_mode(self, hex_value: str) -> str:

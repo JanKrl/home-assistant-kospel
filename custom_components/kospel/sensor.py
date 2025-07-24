@@ -380,7 +380,7 @@ class KospelRawRegisterSensor(KospelSensorBase):
         if not self.coordinator.data:
             return None
         
-        raw_registers = self.coordinator.data.get("status", {}).get("raw_registers", {})
+        raw_registers = self.coordinator.data.get("raw_registers", {})
         raw_value = raw_registers.get(self._register_address, "0000")
         
         # Convert to integer and back to show both hex and decimal
@@ -401,7 +401,7 @@ class KospelRawRegisterSensor(KospelSensorBase):
         if not self.coordinator.data:
             return {}
         
-        raw_registers = self.coordinator.data.get("status", {}).get("raw_registers", {})
+        raw_registers = self.coordinator.data.get("raw_registers", {})
         raw_value = raw_registers.get(self._register_address, "0000")
         
         try:
@@ -447,7 +447,7 @@ class KospelAllRegistersDebugSensor(KospelSensorBase):
         if not self.coordinator.data:
             return None
         
-        raw_registers = self.coordinator.data.get("status", {}).get("raw_registers", {})
+        raw_registers = self.coordinator.data.get("raw_registers", {})
         return f"{len(raw_registers)} registers"
 
     @property
@@ -461,11 +461,11 @@ class KospelAllRegistersDebugSensor(KospelSensorBase):
         if not self.coordinator.data:
             return {}
         
-        raw_registers = self.coordinator.data.get("status", {}).get("raw_registers", {})
+        raw_registers = self.coordinator.data.get("raw_registers", {})
         
         attributes = {
             "register_count": len(raw_registers),
-            "last_update": self.coordinator.data.get("status", {}).get("last_update"),
+            "last_update": self.coordinator.data.get("last_update"),
         }
         
         # Add each register with both hex and decimal values
