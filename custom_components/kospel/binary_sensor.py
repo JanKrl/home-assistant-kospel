@@ -90,8 +90,7 @@ class KospelWaterHeatingBinarySensor(KospelBinarySensorBase):
         if not self.coordinator.data:
             return None
         
-        status = self.coordinator.data.get("status", {})
-        return status.get("water_heating", False)
+        return self.coordinator.data.get("water_heating", False)
 
     @property
     def icon(self) -> str:
@@ -121,8 +120,7 @@ class KospelHeaterRunningBinarySensor(KospelBinarySensorBase):
         if not self.coordinator.data:
             return None
         
-        status = self.coordinator.data.get("status", {})
-        return status.get("heater_running", False)
+        return self.coordinator.data.get("heater_running", False)
 
     @property
     def icon(self) -> str:
@@ -152,8 +150,7 @@ class KospelPumpRunningBinarySensor(KospelBinarySensorBase):
         if not self.coordinator.data:
             return None
         
-        status = self.coordinator.data.get("status", {})
-        return status.get("pump_running", False)
+        return self.coordinator.data.get("pump_running", False)
 
     @property
     def icon(self) -> str:

@@ -90,8 +90,7 @@ class KospelClimate(CoordinatorEntity[KospelDataUpdateCoordinator], ClimateEntit
         if not self.coordinator.data:
             return None
         
-        status = self.coordinator.data.get("status", {})
-        return status.get("current_temperature")
+        return self.coordinator.data.get("current_temperature")
 
     @property
     def target_temperature(self) -> float | None:
@@ -108,8 +107,7 @@ class KospelClimate(CoordinatorEntity[KospelDataUpdateCoordinator], ClimateEntit
         if not self.coordinator.data:
             return None
         
-        status = self.coordinator.data.get("status", {})
-        kospel_mode = status.get("mode", MODE_OFF)
+        kospel_mode = self.coordinator.data.get("mode", MODE_OFF)
         return KOSPEL_TO_HVAC_MODE.get(kospel_mode, HVACMode.OFF)
 
     @property

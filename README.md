@@ -205,24 +205,25 @@ This error occurred in older versions and has been fixed by converting the runni
 
 #### 📊 Wrong Temperature Values
 
-**Version 0.2.0+ includes the correct EKD API implementation:**
-- **EKD API Support**: Now uses the manufacturer's preferred `api/ekd/read` endpoint with proper headers
-- **Correct Variable Names**: Uses the same variable names as the manufacturer's frontend (`TEMP_ROOM`, `ROOM_TEMP_SETTING`, etc.)
-- **Proper Data Processing**: Includes signed integer conversion and 0.1°C resolution handling
-- **Fallback Support**: Automatically falls back to legacy register API if EKD API fails
+**Version 0.3.0+ uses exclusively the EKD API:**
+- **EKD API Only**: Removed legacy register API for cleaner, more reliable code
+- **Manufacturer Compatibility**: Uses identical data processing as the official frontend
+- **Simplified Architecture**: Single API path eliminates parsing inconsistencies
+- **Real-time Data**: Direct access to device variables with automatic conversion
 
-**Major Breakthrough**: Analysis of the manufacturer's JavaScript revealed they use a completely different API endpoint (`api/ekd/read/{device_id}`) with named variables instead of raw register addresses. This should resolve all temperature accuracy issues.
+**Why EKD API Only?**
+Analysis of the manufacturer's JavaScript revealed they use the EKD API (`api/ekd/read/{device_id}`) exclusively in modern versions. The legacy register API was causing parsing issues and inconsistent values. By focusing solely on the EKD API, we ensure:
 
-**EKD API Features:**
-- Direct temperature readings in 0.1°C resolution
-- Proper boolean flag handling
-- Signed integer support for negative temperatures
-- Same variable names as manufacturer frontend
+- ✅ **100% manufacturer compatibility**
+- ✅ **Accurate temperature readings**
+- ✅ **Proper boolean status handling** 
+- ✅ **Signed integer support for negative temperatures**
+- ✅ **Simplified troubleshooting**
 
-If you still see incorrect values after updating to v0.2.0+:
-1. Check the raw register debug sensors to verify hex values match expectations
-2. Compare with manufacturer frontend values  
-3. Report any discrepancies with register address, raw hex, expected value, and actual parsed value
+If you see incorrect values after updating to v0.3.0+:
+1. Check the **EKD API Debug Data** sensor to verify the API is active
+2. Compare EKD variable values with manufacturer frontend values
+3. Report any EKD API errors from the Home Assistant logs
 
 ## Debugging Features (v0.1.4+)
 
@@ -259,16 +260,16 @@ python3 debug_helper.py
 
 ### How to Debug Temperature Issues
 
-**New in v0.2.0**: Check the **EKD API Debug Data** sensor first:
-- If it shows "EKD API Active", the integration is using the correct manufacturer API
-- If it shows "Legacy API", there may be an issue with EKD API access
+**New in v0.3.0**: The integration uses only the EKD API:
+- Check the **EKD API Debug Data** sensor for API status
+- If it shows "EKD API Active", all data comes directly from the manufacturer's API
 - View the sensor attributes to see all EKD variables and their values
 
-**For detailed debugging**:
-1. **Note the manufacturer value** from the official frontend  
-2. **Check the EKD Debug sensor** for the corresponding variable (e.g., `TEMP_ROOM`, `ROOM_TEMP_SETTING`)
+**For debugging**:
+1. **Note the manufacturer value** from the official frontend
+2. **Check the EKD Debug sensor** for the corresponding variable (e.g., `TEMP_ROOM`, `ROOM_TEMP_SETTING`)  
 3. **Compare EKD values** with manufacturer values (should match exactly)
-4. **If using legacy API**, find the raw register value and use the debug helper script
+4. **Report EKD API errors** from Home Assistant logs if values don't match
 
 ### Testing Your Setup
 
