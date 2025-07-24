@@ -47,6 +47,15 @@ class KospelDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.host = host
         self.port = port
 
+    async def async_test_connection(self) -> bool:
+        """Test connection to the device during setup."""
+        try:
+            _LOGGER.debug("Testing connection to Kospel device at %s:%s", self.host, self.port)
+            return await self.api.test_connection()
+        except KospelAPIError as exc:
+            _LOGGER.error("Connection test failed: %s", exc)
+            raise
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from API endpoint."""
         try:
@@ -65,7 +74,11 @@ class KospelDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return data
             
         except KospelAPIError as exc:
+            _LOGGER.error("Error communicating with Kospel device: %s", exc)
             raise UpdateFailed(f"Error communicating with Kospel device: {exc}") from exc
+        except Exception as exc:
+            _LOGGER.exception("Unexpected error during data update")
+            raise UpdateFailed(f"Unexpected error: {exc}") from exc
 
     async def async_set_temperature(self, temperature: float) -> None:
         """Set target temperature."""

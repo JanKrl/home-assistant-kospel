@@ -29,6 +29,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         password=entry.data.get(CONF_PASSWORD),
     )
     
+    # Test connection before first refresh to ensure device discovery works
+    try:
+        _LOGGER.debug("Testing connection to device before setup")
+        await coordinator.async_test_connection()
+        _LOGGER.info("Successfully connected to Kospel device at %s:%s", 
+                    entry.data[CONF_HOST], entry.data.get(CONF_PORT, DEFAULT_PORT))
+    except Exception as exc:
+        _LOGGER.error("Failed to connect to Kospel device during setup: %s", exc)
+        # Don't fail setup completely, let the coordinator handle retries
+        pass
+    
     # Fetch initial data so we have data when entities subscribe
     await coordinator.async_config_entry_first_refresh()
     
