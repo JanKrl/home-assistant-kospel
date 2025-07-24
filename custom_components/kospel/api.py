@@ -43,6 +43,7 @@ class KospelAPI:
         self._password = password
         self._base_url = f"http://{host}:{port}"
         self._device_id = None
+        self._device_type = None
         self._ekd_device_id = None
 
     async def test_connection(self) -> bool:
@@ -152,26 +153,43 @@ class KospelAPI:
             raise KospelAPIError("Failed to set mode") from exc
 
     async def _discover_device_id(self) -> None:
-        """Discover device ID by querying available devices."""
+        """Discover device ID by calling the device API."""
         try:
             async with asyncio.timeout(10):
                 response = await self._session.get(f"{self._base_url}/api/dev")
                 
                 if response.status >= 400:
-                    raise KospelConnectionError(f"HTTP error {response.status}")
+                    raise KospelConnectionError(f"Device API HTTP error {response.status}")
                 
                 data = await response.json()
                 
-                if data.get("status") != "0":
-                    raise KospelConnectionError(f"API error: status {data.get('status')}")
+                if not data or "devs" not in data:
+                    raise KospelConnectionError("Device API returned no device data")
                 
-                # Get the first device ID
-                devs = data.get("devs", [])
-                if not devs:
-                    raise KospelConnectionError("No devices found")
+                devices = data["devs"]
                 
-                self._device_id = devs[0]
-                _LOGGER.info("Discovered device ID: %s", self._device_id)
+                if not devices:
+                    raise KospelConnectionError("No devices found in response")
+                
+                # Find the first available device (excluding device 254 which is CMI)
+                device_id = None
+                device_type = None
+                
+                for dev_id, device_info in devices.items():
+                    if int(dev_id) != 254:  # Skip CMI device
+                        device_id = device_info.get("moduleID", dev_id)
+                        device_type = dev_id
+                        _LOGGER.info("Found device: ID=%s, Type=%s, ModuleID=%s", dev_id, device_type, device_id)
+                        break
+                
+                if device_id is None:
+                    raise KospelConnectionError("No suitable devices found")
+                
+                # Store both device ID and type for session establishment
+                self._device_id = device_id
+                self._device_type = device_type
+                
+                _LOGGER.info("Discovered device ID: %s (type: %s)", device_id, device_type)
                 
         except asyncio.TimeoutError as exc:
             _LOGGER.error("Device discovery timeout")
@@ -238,26 +256,67 @@ class KospelAPI:
 
     async def _establish_session(self) -> bool:
         """Try to establish a session by various methods."""
-        if not self._device_id:
+        if not self._device_id or not self._device_type:
             return False
             
-        # Method 1: Try setting session with regular device ID
+        # Method 1: Call selectModule (this is what the UI does!)
+        if await self._select_module():
+            _LOGGER.debug("Successfully established session via selectModule")
+            return True
+            
+        # Method 2: Try setting session with regular device ID
         if await self._set_session_device(self._device_id):
             _LOGGER.debug("Successfully set session with regular device ID")
             return True
             
-        # Method 2: Try with device ID as string
+        # Method 3: Try with device ID as string
         if await self._set_session_device(str(self._device_id)):
             _LOGGER.debug("Successfully set session with device ID as string")
             return True
             
-        # Method 3: Try visiting the web interface first (might auto-establish session)
+        # Method 4: Try visiting the web interface first (might auto-establish session)
         if await self._initialize_web_session():
             _LOGGER.debug("Successfully initialized web session")
             return True
             
         _LOGGER.debug("All session establishment methods failed")
         return False
+
+    async def _select_module(self) -> bool:
+        """Select module/device to establish session (equivalent to loadModule())."""
+        try:
+            _LOGGER.debug("Attempting selectModule with ID: %s, devType: %s", self._device_id, self._device_type)
+            
+            async with asyncio.timeout(10):
+                response = await self._session.post(
+                    f"{self._base_url}/api/selectModule",
+                    data={
+                        "id": str(self._device_id),
+                        "devType": str(self._device_type)
+                    }
+                )
+                
+                _LOGGER.debug("selectModule response status: %s", response.status)
+                
+                if response.status >= 400:
+                    response_text = await response.text()
+                    _LOGGER.debug("selectModule HTTP error %s: %s", response.status, response_text)
+                    return False
+                
+                data = await response.json()
+                _LOGGER.debug("selectModule response data: %s", data)
+                
+                # Check if module selection was successful
+                if data.get("status") == 0:
+                    _LOGGER.info("Module selection successful - session should be established")
+                    return True
+                else:
+                    _LOGGER.warning("Module selection failed: status=%s", data.get("status"))
+                    return False
+                    
+        except Exception as exc:
+            _LOGGER.debug("selectModule failed: %s", exc)
+            return False
 
     async def _set_session_device(self, device_id: str | int) -> bool:
         """Set session device ID (equivalent to part of unSetSessionDevice())."""
