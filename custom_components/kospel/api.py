@@ -48,40 +48,28 @@ class KospelAPI:
         """Test connection to the device and discover device ID."""
         try:
             # Discover available devices
-            async with asyncio.timeout(10):
-                response = await self._session.get(f"{self._base_url}/api/dev")
+            await self._discover_device_id()
+            
+            # Test getting device registers
+            await self._get_device_registers()
+            
+            return True
                 
-                if response.status >= 400:
-                    raise KospelConnectionError(f"HTTP error {response.status}")
-                
-                data = await response.json()
-                
-                if data.get("status") != "0":
-                    raise KospelConnectionError(f"API error: status {data.get('status')}")
-                
-                # Get the first device ID
-                devs = data.get("devs", [])
-                if not devs:
-                    raise KospelConnectionError("No devices found")
-                
-                self._device_id = devs[0]
-                _LOGGER.debug("Discovered device ID: %s", self._device_id)
-                
-                # Test getting device registers
-                await self._get_device_registers()
-                
-                return True
-                
-        except asyncio.TimeoutError as exc:
-            _LOGGER.error("Connection test timeout")
-            raise KospelConnectionError("Connection timeout") from exc
-        except (aiohttp.ClientError, json.JSONDecodeError) as exc:
+        except (KospelConnectionError, KospelAPIError):
+            # Re-raise connection and API errors as-is
+            raise
+        except Exception as exc:
             _LOGGER.error("Connection test failed: %s", exc)
             raise KospelConnectionError("Unable to connect to device") from exc
 
     async def get_status(self) -> dict[str, Any]:
         """Get current status from the heater."""
         try:
+            # Ensure device ID is discovered before attempting to get registers
+            if not self._device_id:
+                _LOGGER.debug("Device ID not yet discovered, attempting discovery...")
+                await self._discover_device_id()
+            
             registers = await self._get_device_registers()
             
             # Parse register values based on your actual data
@@ -109,6 +97,11 @@ class KospelAPI:
     async def get_settings(self) -> dict[str, Any]:
         """Get current settings from the heater."""
         try:
+            # Ensure device ID is discovered before attempting to get settings
+            if not self._device_id:
+                _LOGGER.debug("Device ID not yet discovered, attempting discovery...")
+                await self._discover_device_id()
+                
             status = await self.get_status()
             
             return {
@@ -144,6 +137,35 @@ class KospelAPI:
         except Exception as exc:
             _LOGGER.error("Failed to set mode: %s", exc)
             raise KospelAPIError("Failed to set mode") from exc
+
+    async def _discover_device_id(self) -> None:
+        """Discover device ID by querying available devices."""
+        try:
+            async with asyncio.timeout(10):
+                response = await self._session.get(f"{self._base_url}/api/dev")
+                
+                if response.status >= 400:
+                    raise KospelConnectionError(f"HTTP error {response.status}")
+                
+                data = await response.json()
+                
+                if data.get("status") != "0":
+                    raise KospelConnectionError(f"API error: status {data.get('status')}")
+                
+                # Get the first device ID
+                devs = data.get("devs", [])
+                if not devs:
+                    raise KospelConnectionError("No devices found")
+                
+                self._device_id = devs[0]
+                _LOGGER.info("Discovered device ID: %s", self._device_id)
+                
+        except asyncio.TimeoutError as exc:
+            _LOGGER.error("Device discovery timeout")
+            raise KospelConnectionError("Device discovery timeout") from exc
+        except (aiohttp.ClientError, json.JSONDecodeError) as exc:
+            _LOGGER.error("Device discovery failed: %s", exc)
+            raise KospelConnectionError("Unable to discover device") from exc
 
     async def _get_device_registers(self) -> dict[str, str]:
         """Get all device registers."""

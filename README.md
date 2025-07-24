@@ -157,6 +157,59 @@ This integration is currently in **experimental development phase**. Implementat
 - Monitor system behavior closely
 - Have alternative heating methods available
 
+## Troubleshooting
+
+### Common Issues
+
+#### ❌ "Device ID not discovered yet" Error
+
+If you see this error in your logs:
+```
+ERROR (MainThread) [custom_components.kospel.api] Failed to get status: Device ID not discovered yet
+```
+
+**Solution**: This has been fixed in recent versions. The integration now automatically discovers the device ID when needed. If you still encounter this issue:
+
+1. **Check network connectivity**: Ensure Home Assistant can reach your Kospel device
+2. **Verify device IP**: Make sure the IP address in your configuration is correct
+3. **Check device status**: Ensure your Kospel C.MI module is powered on and responsive
+4. **Test manually**: Use the provided test script to verify connectivity:
+   ```bash
+   python3 test_device_discovery.py
+   ```
+   (Update the IP address in the script first)
+
+5. **Enable debug logging**: Add this to your `configuration.yaml`:
+   ```yaml
+   logger:
+     logs:
+       custom_components.kospel: debug
+   ```
+
+#### 🔄 Integration Won't Initialize
+
+1. Remove and re-add the integration
+2. Check Home Assistant logs for specific error messages
+3. Verify your device is accessible via HTTP at `http://your-device-ip/api/dev`
+
+#### 📊 Wrong Temperature Values
+
+The register parsing is still experimental. If you see incorrect temperatures:
+1. Check the raw register values in debug logs
+2. Report the issue with your device model and firmware version
+3. The parsing logic may need adjustment for your specific device
+
+### Testing Your Setup
+
+Use the included test script to verify your setup:
+
+```bash
+cd /path/to/ha-kospel-integration
+python3 test_device_discovery.py
+```
+
+Update the `host` variable in the script with your device's IP address.
+
 ## Contributing
 
 Contributions are welcome! Please read the contributing guidelines and submit pull requests for any improvements.
