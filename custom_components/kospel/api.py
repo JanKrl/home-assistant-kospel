@@ -51,15 +51,8 @@ class KospelAPI:
             # Discover device ID for legacy API (used for initial discovery)
             await self._discover_device_id()
             
-            # Try to discover EKD device ID from session first
+            # Try comprehensive EKD session discovery
             await self._discover_ekd_device_id()
-            
-            # If sessionDevice failed (using fallback), try session initialization
-            if self._ekd_device_id == self._device_id:
-                _LOGGER.debug("Using fallback device ID - attempting session initialization")
-                if await self._try_session_initialization():
-                    # Try to get session device ID again after initialization
-                    await self._discover_ekd_device_id()
             
             # Test if EKD API endpoint exists
             if not await self._test_ekd_endpoint():
@@ -189,6 +182,28 @@ class KospelAPI:
 
     async def _discover_ekd_device_id(self) -> None:
         """Discover EKD device ID using the sessionDevice endpoint."""
+        # First, try to get existing session device ID
+        session_id = await self._get_existing_session()
+        if session_id and session_id != -1 and session_id != "-1":
+            self._ekd_device_id = session_id
+            _LOGGER.info("Retrieved existing session device ID: %s", self._ekd_device_id)
+            return
+            
+        # If no existing session, try to establish one
+        if await self._establish_session():
+            session_id = await self._get_existing_session()
+            if session_id and session_id != -1 and session_id != "-1":
+                self._ekd_device_id = session_id
+                _LOGGER.info("Established new session device ID: %s", self._ekd_device_id)
+                return
+        
+        # If all session attempts fail, use regular device ID as fallback
+        _LOGGER.warning("Could not establish session - using fallback device ID")
+        self._ekd_device_id = self._device_id
+        _LOGGER.info("Using fallback device ID for EKD API: %s", self._ekd_device_id)
+
+    async def _get_existing_session(self) -> str | None:
+        """Get existing session device ID (equivalent to getSessionDevice())."""
         try:
             # Use exact timeout from manufacturer's code (5000ms)
             async with asyncio.timeout(5):
@@ -199,65 +214,55 @@ class KospelAPI:
                     }
                 )
                 
-                _LOGGER.debug("sessionDevice response status: %s", response.status)
+                _LOGGER.debug("getSessionDevice response status: %s", response.status)
                 
-                if response.status == 404:
-                    _LOGGER.warning("sessionDevice endpoint not found - device may not support this API version")
-                    # Try using the regular device ID as fallback
-                    self._ekd_device_id = self._device_id
-                    _LOGGER.info("Using fallback device ID for EKD API: %s", self._ekd_device_id)
-                    return
-                elif response.status == 500:
-                    _LOGGER.warning("sessionDevice endpoint returned HTTP 500 - this might be normal if no session is established")
-                    # HTTP 500 might be expected if no session exists yet
-                    # Try using the regular device ID as fallback
-                    self._ekd_device_id = self._device_id
-                    _LOGGER.info("Using fallback device ID for EKD API: %s", self._ekd_device_id)
-                    return
-                elif response.status >= 400:
+                if response.status >= 400:
                     response_text = await response.text()
-                    _LOGGER.warning("sessionDevice API HTTP error %s: %s - using fallback device ID", response.status, response_text)
-                    self._ekd_device_id = self._device_id
-                    _LOGGER.info("Using fallback device ID for EKD API: %s", self._ekd_device_id)
-                    return
+                    _LOGGER.debug("getSessionDevice HTTP error %s: %s", response.status, response_text)
+                    return None
                 
                 data = await response.json()
-                _LOGGER.debug("sessionDevice response data: %s", data)
+                _LOGGER.debug("getSessionDevice response data: %s", data)
                 
                 if "sessionDevice" not in data:
-                    _LOGGER.warning("sessionDevice API returned no device ID - using fallback")
-                    self._ekd_device_id = self._device_id
-                    _LOGGER.info("Using fallback device ID for EKD API: %s", self._ekd_device_id)
-                    return
+                    _LOGGER.debug("getSessionDevice: no sessionDevice in response")
+                    return None
                 
                 session_device_id = data["sessionDevice"]
+                _LOGGER.debug("getSessionDevice returned: %s", session_device_id)
+                return session_device_id
                 
-                # Check if the session device ID is valid (manufacturer returns -1 for unset)
-                if session_device_id == -1 or session_device_id == "-1":
-                    _LOGGER.warning("sessionDevice returned -1 (unset) - using fallback device ID")
-                    self._ekd_device_id = self._device_id
-                    _LOGGER.info("Using fallback device ID for EKD API: %s", self._ekd_device_id)
-                    return
-                
-                self._ekd_device_id = session_device_id
-                _LOGGER.info("Successfully discovered EKD device ID from session: %s", self._ekd_device_id)
-                
-        except asyncio.TimeoutError:
-            _LOGGER.warning("EKD device discovery timeout (5s) - using fallback device ID")
-            self._ekd_device_id = self._device_id
-            _LOGGER.info("Using fallback device ID for EKD API: %s", self._ekd_device_id)
-        except (aiohttp.ClientError, json.JSONDecodeError) as exc:
-            _LOGGER.warning("EKD device discovery failed (%s) - using fallback device ID", exc)
-            self._ekd_device_id = self._device_id
-            _LOGGER.info("Using fallback device ID for EKD API: %s", self._ekd_device_id)
+        except Exception as exc:
+            _LOGGER.debug("getSessionDevice failed: %s", exc)
+            return None
 
-    async def _try_session_initialization(self) -> bool:
-        """Try to initialize a session by setting the device ID (experimental)."""
+    async def _establish_session(self) -> bool:
+        """Try to establish a session by various methods."""
         if not self._device_id:
             return False
             
+        # Method 1: Try setting session with regular device ID
+        if await self._set_session_device(self._device_id):
+            _LOGGER.debug("Successfully set session with regular device ID")
+            return True
+            
+        # Method 2: Try with device ID as string
+        if await self._set_session_device(str(self._device_id)):
+            _LOGGER.debug("Successfully set session with device ID as string")
+            return True
+            
+        # Method 3: Try visiting the web interface first (might auto-establish session)
+        if await self._initialize_web_session():
+            _LOGGER.debug("Successfully initialized web session")
+            return True
+            
+        _LOGGER.debug("All session establishment methods failed")
+        return False
+
+    async def _set_session_device(self, device_id: str | int) -> bool:
+        """Set session device ID (equivalent to part of unSetSessionDevice())."""
         try:
-            _LOGGER.debug("Attempting session initialization with device ID: %s", self._device_id)
+            _LOGGER.debug("Attempting to set session device ID: %s", device_id)
             
             async with asyncio.timeout(5):
                 response = await self._session.post(
@@ -266,21 +271,48 @@ class KospelAPI:
                         "Accept": "application/vnd.kospel.cmi-v1+json",
                         "Content-Type": "text/plain"
                     },
-                    data=str(self._device_id)
+                    data=str(device_id)
                 )
                 
-                _LOGGER.debug("Session initialization response status: %s", response.status)
+                _LOGGER.debug("setSessionDevice response status: %s", response.status)
                 
                 if response.status < 400:
-                    _LOGGER.info("Session initialization successful")
+                    _LOGGER.debug("Session establishment successful")
                     return True
                 else:
                     response_text = await response.text()
-                    _LOGGER.debug("Session initialization failed: %s - %s", response.status, response_text)
+                    _LOGGER.debug("Session establishment failed: %s - %s", response.status, response_text)
                     return False
                     
         except Exception as exc:
-            _LOGGER.debug("Session initialization failed: %s", exc)
+            _LOGGER.debug("Session establishment exception: %s", exc)
+            return False
+
+    async def _initialize_web_session(self) -> bool:
+        """Try to initialize session by visiting the main web interface."""
+        try:
+            _LOGGER.debug("Attempting to initialize web session")
+            
+            async with asyncio.timeout(10):
+                # Try to access the main web interface (this might auto-establish a session)
+                response = await self._session.get(
+                    f"{self._base_url}/",
+                    headers={
+                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                        "User-Agent": "Mozilla/5.0 (compatible; Home Assistant Kospel Integration)"
+                    }
+                )
+                
+                _LOGGER.debug("Web interface response status: %s", response.status)
+                
+                if response.status < 400:
+                    _LOGGER.debug("Web interface accessible - session might be established")
+                    return True
+                else:
+                    return False
+                    
+        except Exception as exc:
+            _LOGGER.debug("Web session initialization failed: %s", exc)
             return False
 
 

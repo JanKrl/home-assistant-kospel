@@ -9,6 +9,6 @@
   "issue_tracker": "https://github.com/JanKrl/home-assistant-kospel/issues",
   "requirements": ["aiohttp"],
   "ssdp": [],
-      "version": "0.3.3",
+      "version": "0.3.4",
   "zeroconf": []
 }
