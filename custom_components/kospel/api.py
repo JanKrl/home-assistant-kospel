@@ -223,38 +223,19 @@ class KospelAPI:
             if value == 0xFFFF:  # Invalid/not available
                 return None
             
-            # Based on typical heating system patterns and the user's report of incorrect values,
-            # temperatures are usually encoded as signed 16-bit values in tenths of degrees
+            # Based on register analysis, the pattern is:
+            # Little-endian byte order, divided by 10
+            # Examples:
+            # 4a01 → 0x014a (330) → 33.0°C ✓
+            # e001 → 0x01e0 (480) → 48.0°C ✓  
+            # 3201 → 0x0132 (306) → 30.6°C ✓
             
-            # Method 1: Try direct division by 10 (most common for heating systems)
-            temp_direct = value / 10.0
-            
-            # Method 2: Check if little-endian byte order is needed
+            # Convert from little-endian and divide by 10
             little_endian = ((value & 0xFF) << 8) | ((value >> 8) & 0xFF)
-            temp_little_endian = little_endian / 10.0
+            temperature = little_endian / 10.0
             
-            # Method 3: Handle signed values (for sub-zero temperatures)
-            if value > 32767:  # Convert from unsigned to signed 16-bit
-                signed_value = value - 65536
-                temp_signed = signed_value / 10.0
-            else:
-                temp_signed = value / 10.0
-            
-            # Heuristic: choose the most reasonable temperature value
-            # Typical room/water temperatures should be between -20°C and 100°C
-            candidates = [temp_direct, temp_little_endian, temp_signed]
-            reasonable_temps = [t for t in candidates if -20.0 <= t <= 100.0]
-            
-            if reasonable_temps:
-                # Return the first reasonable temperature
-                result = reasonable_temps[0]
-                _LOGGER.debug("Temperature parsing for %s: raw=%d → %.1f°C", hex_value, value, result)
-                return result
-            else:
-                # If no reasonable temperature found, use direct interpretation
-                result = temp_direct
-                _LOGGER.debug("Temperature parsing for %s: raw=%d → %.1f°C (fallback)", hex_value, value, result)
-                return result
+            _LOGGER.debug("Temperature parsing for %s: LE %d → %.1f°C", hex_value, little_endian, temperature)
+            return temperature
             
         except (ValueError, TypeError):
             return None
@@ -263,11 +244,20 @@ class KospelAPI:
         """Parse boolean from hex register value."""
         try:
             value = int(hex_value, 16)
-            # For boolean values, check if any significant bits are set
-            # Common patterns: 0x0000 = false, 0x0001 = true, 0x0100 = true (bit 8 set)
-            result = value != 0
-            _LOGGER.debug("Boolean parsing for %s: raw=%d → %s", hex_value, value, result)
+            
+            # Based on register analysis, the pattern is:
+            # Check if LOW BYTE is non-zero
+            # Examples:
+            # 0100 (OFF) → low_byte = 0x00 → False ✓
+            # 4600 (OFF) → low_byte = 0x00 → False ✓
+            # xxxx01 (ON) → low_byte = 0x01 → True ✓
+            
+            low_byte = value & 0xFF
+            result = low_byte != 0
+            
+            _LOGGER.debug("Boolean parsing for %s: low_byte=%02X → %s", hex_value, low_byte, result)
             return result
+            
         except (ValueError, TypeError):
             return False
 

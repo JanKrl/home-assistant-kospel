@@ -205,17 +205,20 @@ This error occurred in older versions and has been fixed by converting the runni
 
 #### 📊 Wrong Temperature Values
 
-**Version 0.1.3+ includes improved temperature parsing logic:**
-- Enhanced register interpretation for CO and CWU temperatures
-- Better handling of little-endian byte order
-- Automatic selection of reasonable temperature values
-- Support for both 0.1°C and 1°C temperature resolutions
+**Version 0.1.5+ includes corrected temperature parsing logic:**
+- **Fixed parsing algorithm**: Little-endian byte order with division by 10
+- **Verified with real device data**: Parsing patterns confirmed through register analysis
+- **Corrected boolean logic**: Low-byte checking for on/off status
+- **All register mappings verified**: CO and CWU temperatures now accurate
 
-If you still see incorrect temperatures after updating to v0.1.3+:
-1. Enable debug logging for the `custom_components.kospel` component
-2. Check the raw register values and parsing results in debug logs
-3. Report the issue with your device model, firmware version, and expected vs actual values
-4. The parsing logic continues to be refined based on user feedback
+**The parsing is now based on confirmed patterns:**
+- Temperature: `Little-endian ÷ 10` (e.g., `4a01` → `33.0°C`)
+- Boolean: `Low byte != 0` (e.g., `0100` → `False`)
+
+If you still see incorrect values after updating to v0.1.5+:
+1. Check the raw register debug sensors to verify hex values match expectations
+2. Compare with manufacturer frontend values  
+3. Report any discrepancies with register address, raw hex, expected value, and actual parsed value
 
 ## Debugging Features (v0.1.4+)
 
