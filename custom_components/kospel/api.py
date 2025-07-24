@@ -50,9 +50,16 @@ class KospelAPI:
             # Discover available devices
             await self._discover_device_id()
             
-            # Test getting device registers
-            await self._get_device_registers()
+            # Test if EKD API endpoint exists
+            if not await self._test_ekd_endpoint():
+                raise KospelAPIError("Device does not support EKD API - please check device firmware version")
             
+            # Test EKD API access with full variable set
+            ekd_data = await self._get_ekd_data()
+            if not ekd_data:
+                raise KospelAPIError("EKD API test failed - no data returned")
+            
+            _LOGGER.info("Connection test successful - EKD API working with %d variables", len(ekd_data))
             return True
                 
         except (KospelConnectionError, KospelAPIError):
@@ -72,13 +79,20 @@ class KospelAPI:
             
             # Use EKD API exclusively - this is the manufacturer's preferred method
             _LOGGER.info("Retrieving data via EKD API...")
-            ekd_data = await self._get_ekd_data()
-            
-            if not ekd_data:
-                raise KospelAPIError("EKD API returned empty data")
-            
-            _LOGGER.info("✅ EKD API successful with %d variables", len(ekd_data))
-            return self._parse_ekd_status(ekd_data)
+            try:
+                ekd_data = await self._get_ekd_data()
+                
+                if not ekd_data:
+                    raise KospelAPIError("EKD API returned empty data - device may not support EKD API")
+                
+                _LOGGER.info("✅ EKD API successful with %d variables", len(ekd_data))
+                return self._parse_ekd_status(ekd_data)
+                
+            except KospelAPIError:
+                raise
+            except Exception as exc:
+                _LOGGER.error("EKD API call failed with exception: %s", exc)
+                raise KospelAPIError(f"EKD API failed: {exc}") from exc
             
         except Exception as exc:
             _LOGGER.error("Failed to get status: %s", exc)
@@ -159,6 +173,34 @@ class KospelAPI:
 
 
 
+    async def _test_ekd_endpoint(self) -> bool:
+        """Test if the EKD API endpoint exists on this device."""
+        if not self._device_id:
+            return False
+        
+        try:
+            # Try a simple test with minimal variables
+            test_url = f"{self._base_url}/api/ekd/read/{self._device_id}"
+            test_variables = ["TEMP_ROOM"]  # Just test with one common variable
+            
+            async with asyncio.timeout(5):
+                response = await self._session.post(
+                    test_url,
+                    headers={"Accept": "application/vnd.kospel.cmi-v1+json", "Content-Type": "application/json"},
+                    json=test_variables
+                )
+                
+                # If we get anything other than 404, the endpoint exists
+                if response.status == 404:
+                    _LOGGER.warning("EKD API endpoint not found (404) - device may not support EKD API")
+                    return False
+                
+                return True
+                
+        except Exception as exc:
+            _LOGGER.debug("EKD endpoint test failed: %s", exc)
+            return False
+
     async def _get_ekd_data(self) -> dict[str, Any]:
         """Get data using the EKD API (manufacturer's preferred method)."""
         if not self._device_id:
@@ -207,15 +249,18 @@ class KospelAPI:
         
         try:
             url = f"{self._base_url}/api/ekd/read/{self._device_id}"
-            _LOGGER.debug("EKD API request to: %s with %d variables", url, len(variables))
+            headers = {
+                "Accept": "application/vnd.kospel.cmi-v1+json",
+                "Content-Type": "application/json"
+            }
+            _LOGGER.info("EKD API request: POST %s", url)
+            _LOGGER.debug("EKD API headers: %s", headers)
+            _LOGGER.debug("EKD API variables (%d): %s", len(variables), variables)
             
             async with asyncio.timeout(10):
                 response = await self._session.post(
                     url,
-                    headers={
-                        "Accept": "application/vnd.kospel.cmi-v1+json",
-                        "Content-Type": "application/json"
-                    },
+                    headers=headers,
                     json=variables
                 )
                 
@@ -230,6 +275,9 @@ class KospelAPI:
                 _LOGGER.debug("EKD API response data keys: %s", list(data.keys()))
                 
                 regs = data.get("regs", {})
+                if not regs:
+                    _LOGGER.error("EKD API returned no 'regs' data. Full response: %s", data)
+                    return {}
                 
                 # Apply signed integer conversion like the frontend does
                 for reg_name, value in regs.items():
