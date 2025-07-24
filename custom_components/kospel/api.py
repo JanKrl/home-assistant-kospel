@@ -100,11 +100,14 @@ class KospelAPI:
                 "error_code": self._parse_error(registers.get("0b62", "0000")),
                 
                 # Use the CO temperature as the primary target for Home Assistant compatibility
-                "target_temperature": self._parse_temperature(registers.get("0bb8", "0000")),
+                "target_temperature": self._parse_temperature(registers.get("0bb8", "0000"), "0bb8"),
                 
                 "last_update": asyncio.get_event_loop().time(),
                 "raw_registers": registers,  # Include raw data for debugging
             }
+            
+            # Add comprehensive register analysis for debugging
+            self._log_register_analysis(registers)
             
             _LOGGER.debug("Parsed status data: %s", status_data)
             return status_data
@@ -374,6 +377,82 @@ class KospelAPI:
             return int(hex_value, 16)
         except (ValueError, TypeError):
             return 0
+
+    def _log_register_analysis(self, registers: dict[str, str]) -> None:
+        """Log comprehensive analysis of all temperature-related registers."""
+        _LOGGER.warning("=== KOSPEL REGISTER ANALYSIS FOR DEBUGGING ===")
+        
+        # Key temperature registers to analyze
+        temp_registers = [
+            ("0bb8", "Target CO (our current mapping)"),
+            ("0bb9", "Target CWU (our current mapping)"),
+            ("0c1c", "Current temp (our current mapping)"), 
+            ("0c1d", "Water temp (our current mapping)"),
+            ("0c1e", "Outside temp (our current mapping)"),
+            ("0c1f", "Return temp (our current mapping)"),
+        ]
+        
+        # Also check some other ranges that might contain the real values
+        other_registers = [
+            ("0c00", "0c00 - potential temp register"),
+            ("0c01", "0c01 - potential temp register"),
+            ("0c02", "0c02 - potential temp register"),
+            ("0c10", "0c10 - potential temp register"),
+            ("0c11", "0c11 - potential temp register"),
+            ("0c12", "0c12 - potential temp register"),
+            ("0c20", "0c20 - potential temp register"),
+            ("0bb0", "0bb0 - potential setting register"),
+            ("0bb1", "0bb1 - potential setting register"),
+            ("0bb2", "0bb2 - potential setting register"),
+            ("0bb3", "0bb3 - potential setting register"),
+            ("0bb4", "0bb4 - potential setting register"),
+            ("0bb5", "0bb5 - potential setting register"),
+            ("0bb6", "0bb6 - potential setting register"),
+            ("0bb7", "0bb7 - potential setting register"),
+            ("0bba", "0bba - potential setting register"),
+            ("0bbb", "0bbb - potential setting register"),
+        ]
+        
+        all_registers = temp_registers + other_registers
+        
+        for reg_addr, description in all_registers:
+            hex_value = registers.get(reg_addr, "0000")
+            if hex_value == "0000":
+                continue
+                
+            value = int(hex_value, 16)
+            if value == 0:
+                continue
+                
+            _LOGGER.warning(f"Register {reg_addr} ({description}): {hex_value} ({value})")
+            
+            # Try multiple temperature parsing methods
+            if "temp" in description.lower():
+                le_value = ((value & 0xFF) << 8) | ((value >> 8) & 0xFF)
+                methods = [
+                    ("LE/10", le_value / 10.0),
+                    ("BE/10", value / 10.0),
+                    ("LE/100", le_value / 100.0),
+                    ("BE/100", value / 100.0),
+                    ("High byte", float((value >> 8) & 0xFF)),
+                    ("Low byte", float(value & 0xFF)),
+                ]
+                
+                for method_name, temp in methods:
+                    if 0 <= temp <= 100:  # Reasonable temperature range
+                        _LOGGER.warning(f"  {method_name:10}: {temp:6.1f}°C")
+            
+            # For setting registers, also check if it could be an index
+            if "setting" in description.lower():
+                high_byte = (value >> 8) & 0xFF
+                low_byte = value & 0xFF
+                _LOGGER.warning(f"  Bytes: high={high_byte}, low={low_byte}")
+                
+                # Check if it could be a temperature lookup
+                if 50 <= value <= 300:  # 5.0-30.0°C encoded as 50-300
+                    _LOGGER.warning(f"  Index/10: {value/10.0:.1f}°C")
+        
+        _LOGGER.warning("=== END REGISTER ANALYSIS ===")
 
     async def close(self) -> None:
         """Close the HTTP session."""

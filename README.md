@@ -205,17 +205,18 @@ This error occurred in older versions and has been fixed by converting the runni
 
 #### 📊 Wrong Temperature Values
 
-**Version 0.1.5+ includes corrected temperature parsing logic:**
-- **Fixed parsing algorithm**: Little-endian byte order with division by 10
-- **Verified with real device data**: Parsing patterns confirmed through register analysis
-- **Corrected boolean logic**: Low-byte checking for on/off status
-- **All register mappings verified**: CO and CWU temperatures now accurate
+**Version 0.1.6+ includes enhanced debugging for temperature discrepancies:**
+- **Comprehensive register analysis**: All temperature registers are logged with multiple parsing methods
+- **Frontend code analysis**: Based on manufacturer's JavaScript, some registers may contain indices rather than direct temperatures
+- **Multiple parsing attempts**: Target temperatures are tested with various encoding methods
+- **Extended register scanning**: Additional register ranges are checked for alternative temperature sources
 
-**The parsing is now based on confirmed patterns:**
-- Temperature: `Little-endian ÷ 10` (e.g., `4a01` → `33.0°C`)
-- Boolean: `Low byte != 0` (e.g., `0100` → `False`)
+**Current findings:**
+- Current/measured temperatures (0xC1C-0xC1F range): Use `Little-endian ÷ 10`
+- Target temperatures (0xBB8-0xBB9 range): May use different encoding or contain setting indices
+- Boolean values: Use `Low byte != 0` check
 
-If you still see incorrect values after updating to v0.1.5+:
+If you still see incorrect values after updating to v0.1.6+:
 1. Check the raw register debug sensors to verify hex values match expectations
 2. Compare with manufacturer frontend values  
 3. Report any discrepancies with register address, raw hex, expected value, and actual parsed value
