@@ -1,6 +1,33 @@
-# Kospel Register Reference
+# Kospel API Reference
 
-This document lists the known register addresses and their meanings for debugging purposes.
+This document covers both the EKD API (preferred) and legacy register API (fallback).
+
+## EKD API (v0.2.0+) - **RECOMMENDED**
+
+The integration now uses the manufacturer's EKD API which provides direct access to named variables.
+
+### Key EKD Variables
+
+| Variable Name | Description | Resolution | Example |
+|---------------|-------------|------------|---------|
+| `TEMP_ROOM` | Room temperature (current) | 0.1°C | 230 = 23.0°C |
+| `ROOM_TEMP_SETTING` | Room temperature setting (target CO) | 0.1°C | 70 = 7.0°C |
+| `TEMP_EXT` | External temperature (outside) | 0.1°C | 125 = 12.5°C |
+| `DHW_TEMP_SETTING` | DHW temperature setting (target CWU) | 0.1°C | 70 = 7.0°C |
+| `DHW_SUPPLY_TEMP` | DHW supply temperature | 0.1°C | 550 = 55.0°C |
+| `FLAG_CH_HEATING` | Central heating status | Boolean | 1 = ON, 0 = OFF |
+| `FLAG_DHW_HEATING` | DHW heating status | Boolean | 1 = ON, 0 = OFF |
+| `FLAG_CH_PUMP_OFF_ON` | CH pump status | Boolean | 1 = ON, 0 = OFF |
+
+### EKD API Benefits
+- ✅ **Same data as manufacturer frontend**
+- ✅ **No complex parsing required**  
+- ✅ **Signed integer support**
+- ✅ **Direct 0.1°C resolution**
+
+## Legacy Register API (Fallback Only)
+
+Used only when EKD API is unavailable. For reference and debugging purposes.
 
 ## Temperature Registers
 

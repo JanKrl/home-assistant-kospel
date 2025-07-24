@@ -56,6 +56,8 @@ async def async_setup_entry(
         KospelRawRegisterSensor(coordinator, config_entry, "0b62", "Error Code"),
         # Comprehensive debug sensor
         KospelAllRegistersDebugSensor(coordinator, config_entry),
+        # EKD API debug sensor
+        KospelEKDDataDebugSensor(coordinator, config_entry),
     ]
     async_add_entities(entities)
 
@@ -519,3 +521,59 @@ class KospelAllRegistersDebugSensor(KospelSensorBase):
         attributes["formatted_summary"] = " | ".join(register_summary)
         
         return attributes
+
+
+class KospelEKDDataDebugSensor(KospelSensorBase):
+    """Debug sensor for EKD API data."""
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:api"
+
+    def __init__(
+        self,
+        coordinator: KospelDataUpdateCoordinator,
+        config_entry: ConfigEntry,
+    ) -> None:
+        """Initialize the EKD debug sensor."""
+        super().__init__(coordinator, config_entry, "ekd_debug_data")
+        self._attr_name = "EKD API Debug Data"
+
+    @property
+    def native_value(self) -> str:
+        """Return the EKD API data status."""
+        if hasattr(self.coordinator, 'data') and self.coordinator.data:
+            ekd_data = self.coordinator.data.get("raw_ekd_data")
+            if ekd_data:
+                return "EKD API Active"
+            else:
+                return "Legacy API"
+        return "No Data"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return EKD API data as attributes."""
+        if not (hasattr(self.coordinator, 'data') and self.coordinator.data):
+            return {"status": "No coordinator data"}
+        
+        ekd_data = self.coordinator.data.get("raw_ekd_data")
+        if not ekd_data:
+            return {"status": "Using legacy register API"}
+        
+        # Format EKD data for display
+        formatted_data = {}
+        for key, value in ekd_data.items():
+            if key.startswith("TEMP_") or key.endswith("_TEMP") or key.endswith("_SETTING"):
+                if value is not None and isinstance(value, (int, float)):
+                    formatted_data[key] = f"{value} ({value/10.0:.1f}°C)"
+                else:
+                    formatted_data[key] = str(value)
+            elif key.startswith("FLAG_"):
+                formatted_data[key] = bool(value) if value is not None else None
+            else:
+                formatted_data[key] = value
+        
+        return {
+            "api_type": "EKD API v1",
+            "variable_count": len(ekd_data),
+            **formatted_data
+        }

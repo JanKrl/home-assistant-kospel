@@ -70,6 +70,16 @@ class KospelAPI:
                 _LOGGER.debug("Device ID not yet discovered, attempting discovery...")
                 await self._discover_device_id()
             
+            # Try the new EKD API first, fall back to old API if needed
+            try:
+                ekd_data = await self._get_ekd_data()
+                if ekd_data:
+                    _LOGGER.info("Using EKD API data")
+                    return self._parse_ekd_status(ekd_data)
+            except Exception as exc:
+                _LOGGER.warning("EKD API failed, falling back to legacy API: %s", exc)
+            
+            # Fallback to legacy register API
             registers = await self._get_device_registers()
             
             # Parse register values based on the manufacturer's frontend analysis
@@ -217,6 +227,147 @@ class KospelAPI:
             raise KospelAPIError("Request timeout") from exc
         except (aiohttp.ClientError, json.JSONDecodeError) as exc:
             raise KospelAPIError(f"Request failed: {exc}") from exc
+
+    async def _get_ekd_data(self) -> dict[str, Any]:
+        """Get data using the EKD API (manufacturer's preferred method)."""
+        if not self._device_id:
+            raise KospelAPIError("Device ID not discovered yet")
+        
+        # Variables from the manufacturer's frontend ref_start() function
+        variables = [
+            "TEMP_ROOM",                    # Room temperature (current)
+            "ROOM_TEMP_SETTING",            # Room temperature setting (target CO)
+            "TEMP_EXT",                     # External temperature (outside)
+            "DHW_TEMP_SETTING",             # DHW temperature setting (target CWU)
+            "DHW_SUPPLY_TEMP",              # DHW supply temperature (water temp)
+            "FLAG_BUFFER_TIMETABLE_LOADING_TASK",
+            "OPERATING_MODE",               # Operating mode
+            "ROOM_TEMP_SETTING_INDEX",      # Room temperature setting index
+            "FLAG_ROOM_REGULATOR_INT_EXT",
+            "FLAG_CH_MANUAL_AUTO_SETTING",
+            "DHW_TEMP_SETTING_INDEX",       # DHW temperature setting index
+            "FLAG_DHW_ACTIVATION_NO_YES",
+            "FLAG_DHW_TERMOSTAT_INT_EXT",
+            "FLAG_MANUAL_MODE_ROOM_TEMP",
+            "FLAG_PARTY_MODE",
+            "FLAG_VACATION_MODE",
+            "FLAG_SUMMER_MODE",
+            "FLAG_WINTER_MODE",
+            "FLAG_TURBO_MODE_IN_PROGRESS",
+            "FLAG_TURBO_MODE_CONDITION_FULFILLED",
+            "FLAG_EEPROM_ERROR",
+            "FLAG_TEMP_IN_ERROR",
+            "FLAG_TEMP_OUT_ERROR",
+            "FLAG_SUPPLY_TEMP_ERROR",
+            "FLAG_TEMP_INT_ERROR",
+            "FLAG_TEMP_EXT_ERROR",
+            "FLAG_TEMP_ROOM_ERROR",
+            "FLAG_LOW_BATTERY_ERROR",
+            "FLAG_PREASSURE_ERROR",
+            "FLAG_CH_PUMP_ERROR",
+            "FLAG_CH_VALVE_ERROR",
+            "FLAG_DHW_VALVE_ERROR",
+            "HU_INCLUDED_POWER",
+            "FLAG_CH_HEATING",              # Central heating status
+            "FLAG_DHW_HEATING",             # DHW heating status
+            "FLAG_CH_PUMP_OFF_ON",          # CH pump status
+            "FLAG_IN_RP",
+        ]
+        
+        try:
+            async with asyncio.timeout(10):
+                response = await self._session.post(
+                    f"{self._base_url}/api/ekd/read/{self._device_id}",
+                    headers={
+                        "Accept": "application/vnd.kospel.cmi-v1+json",
+                        "Content-Type": "application/json"
+                    },
+                    json=variables
+                )
+                
+                if response.status >= 400:
+                    raise KospelAPIError(f"EKD API HTTP error {response.status}")
+                
+                data = await response.json()
+                regs = data.get("regs", {})
+                
+                # Apply signed integer conversion like the frontend does
+                for reg_name, value in regs.items():
+                    if isinstance(value, int) and (value & 32768) > 0:
+                        regs[reg_name] = value - 65536
+                
+                _LOGGER.debug("Retrieved EKD data: %s", regs)
+                return regs
+                
+        except asyncio.TimeoutError as exc:
+            raise KospelAPIError("EKD API timeout") from exc
+        except (aiohttp.ClientError, json.JSONDecodeError) as exc:
+            raise KospelAPIError(f"EKD API request failed: {exc}") from exc
+
+    def _parse_ekd_status(self, ekd_data: dict[str, Any]) -> dict[str, Any]:
+        """Parse status data from EKD API response."""
+        try:
+            # Parse temperature values - EKD API returns values in 0.1°C resolution
+            def parse_ekd_temp(value):
+                if value is None or value == 0xFFFF or value == -1:
+                    return None
+                return float(value) / 10.0
+            
+            # Parse boolean flags
+            def parse_ekd_flag(value):
+                if value is None:
+                    return False
+                return bool(value)
+            
+            status_data = {
+                # Temperature readings (direct from EKD API names)
+                "current_temperature": parse_ekd_temp(ekd_data.get("TEMP_ROOM")),
+                "target_temperature_co": parse_ekd_temp(ekd_data.get("ROOM_TEMP_SETTING")),
+                "target_temperature_cwu": parse_ekd_temp(ekd_data.get("DHW_TEMP_SETTING")),
+                "water_temperature": parse_ekd_temp(ekd_data.get("DHW_SUPPLY_TEMP")),
+                "outside_temperature": parse_ekd_temp(ekd_data.get("TEMP_EXT")),
+                "return_temperature": None,  # Not available in EKD API
+                
+                # Status indicators (using EKD flags)
+                "heater_running": parse_ekd_flag(ekd_data.get("FLAG_CH_HEATING")),
+                "water_heating": parse_ekd_flag(ekd_data.get("FLAG_DHW_HEATING")),
+                "pump_running": parse_ekd_flag(ekd_data.get("FLAG_CH_PUMP_OFF_ON")),
+                
+                # Operating parameters
+                "mode": self._parse_ekd_mode(ekd_data.get("OPERATING_MODE")),
+                "power": ekd_data.get("HU_INCLUDED_POWER"),
+                "error_code": 0,  # Parse from error flags if needed
+                
+                # Use CO temperature as primary target for Home Assistant
+                "target_temperature": parse_ekd_temp(ekd_data.get("ROOM_TEMP_SETTING")),
+                
+                "last_update": asyncio.get_event_loop().time(),
+                "raw_ekd_data": ekd_data,  # Include raw EKD data for debugging
+            }
+            
+            _LOGGER.info("Parsed EKD status data: %s", {k: v for k, v in status_data.items() if k != "raw_ekd_data"})
+            return status_data
+            
+        except Exception as exc:
+            _LOGGER.error("Failed to parse EKD status: %s", exc)
+            raise KospelAPIError("Failed to parse EKD status") from exc
+
+    def _parse_ekd_mode(self, mode_value: int | None) -> str:
+        """Parse operating mode from EKD API value."""
+        if mode_value is None:
+            return "unknown"
+        
+        # Mode mappings based on typical heating system modes
+        mode_map = {
+            0: "auto",
+            1: "manual",
+            2: "off",
+            3: "heating",
+            4: "summer",
+            5: "winter",
+        }
+        
+        return mode_map.get(mode_value, f"mode_{mode_value}")
 
     def _parse_temperature(self, hex_value: str, register_addr: str = "") -> float | None:
         """Parse temperature from hex register value.
