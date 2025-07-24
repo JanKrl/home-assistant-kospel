@@ -60,19 +60,13 @@ class KospelDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from API endpoint."""
         try:
-            # Get both status and settings data
+            # Get status data - this contains all the sensor data we need
             status_data = await self.api.get_status()
-            settings_data = await self.api.get_settings()
             
-            # Combine the data
-            data = {
-                "status": status_data,
-                "settings": settings_data,
-                "last_update": dt_util.utcnow(),
-            }
-            
-            _LOGGER.debug("Successfully updated data: %s", data)
-            return data
+            # Return the status data directly (flattened structure for sensors)
+            # The sensors expect the data structure to be flat, not nested under "status"
+            _LOGGER.debug("Successfully updated data from coordinator")
+            return status_data
             
         except KospelAPIError as exc:
             _LOGGER.error("Error communicating with Kospel device: %s", exc)

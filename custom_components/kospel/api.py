@@ -72,12 +72,16 @@ class KospelAPI:
             
             # Try the new EKD API first, fall back to old API if needed
             try:
+                _LOGGER.debug("Attempting EKD API call...")
                 ekd_data = await self._get_ekd_data()
                 if ekd_data:
-                    _LOGGER.info("Using EKD API data")
+                    _LOGGER.info("Successfully retrieved EKD API data with %d variables", len(ekd_data))
                     return self._parse_ekd_status(ekd_data)
+                else:
+                    _LOGGER.warning("EKD API returned empty data, falling back to legacy API")
             except Exception as exc:
                 _LOGGER.warning("EKD API failed, falling back to legacy API: %s", exc)
+                _LOGGER.debug("EKD API error details:", exc_info=True)
             
             # Fallback to legacy register API
             registers = await self._get_device_registers()
@@ -275,9 +279,12 @@ class KospelAPI:
         ]
         
         try:
+            url = f"{self._base_url}/api/ekd/read/{self._device_id}"
+            _LOGGER.debug("EKD API request to: %s with %d variables", url, len(variables))
+            
             async with asyncio.timeout(10):
                 response = await self._session.post(
-                    f"{self._base_url}/api/ekd/read/{self._device_id}",
+                    url,
                     headers={
                         "Accept": "application/vnd.kospel.cmi-v1+json",
                         "Content-Type": "application/json"
@@ -285,10 +292,16 @@ class KospelAPI:
                     json=variables
                 )
                 
+                _LOGGER.debug("EKD API response status: %d", response.status)
+                
                 if response.status >= 400:
-                    raise KospelAPIError(f"EKD API HTTP error {response.status}")
+                    response_text = await response.text()
+                    _LOGGER.error("EKD API HTTP error %d: %s", response.status, response_text)
+                    raise KospelAPIError(f"EKD API HTTP error {response.status}: {response_text}")
                 
                 data = await response.json()
+                _LOGGER.debug("EKD API response data keys: %s", list(data.keys()))
+                
                 regs = data.get("regs", {})
                 
                 # Apply signed integer conversion like the frontend does
