@@ -30,6 +30,7 @@ async def async_setup_entry(
     entities = [
         KospelWaterHeatingBinarySensor(coordinator, config_entry),
         KospelHeaterRunningBinarySensor(coordinator, config_entry),
+        KospelPumpRunningBinarySensor(coordinator, config_entry),
     ]
     async_add_entities(entities)
 
@@ -129,3 +130,34 @@ class KospelHeaterRunningBinarySensor(KospelBinarySensorBase):
         if self.is_on:
             return "mdi:heating-coil"
         return "mdi:radiator-off"
+
+
+class KospelPumpRunningBinarySensor(KospelBinarySensorBase):
+    """Binary sensor for pump running status."""
+
+    _attr_name = "Pump Running"
+    _attr_device_class = BinarySensorDeviceClass.RUNNING
+
+    def __init__(
+        self,
+        coordinator: KospelDataUpdateCoordinator,
+        config_entry: ConfigEntry,
+    ) -> None:
+        """Initialize the pump running binary sensor."""
+        super().__init__(coordinator, config_entry, "pump_running")
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return true if pump is running."""
+        if not self.coordinator.data:
+            return None
+        
+        status = self.coordinator.data.get("status", {})
+        return status.get("pump_running", False)
+
+    @property
+    def icon(self) -> str:
+        """Return the icon."""
+        if self.is_on:
+            return "mdi:pump"
+        return "mdi:pump-off"

@@ -14,6 +14,7 @@ from homeassistant.const import UnitOfPower, UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.helpers.entity import EntityCategory
 
 from .const import DOMAIN, MANUFACTURER
 from .coordinator import KospelDataUpdateCoordinator
@@ -32,10 +33,29 @@ async def async_setup_entry(
     entities = [
         KospelTemperatureSensor(coordinator, config_entry),
         KospelTargetTemperatureSensor(coordinator, config_entry),
+        KospelTargetTemperatureCOSensor(coordinator, config_entry),
+        KospelTargetTemperatureCWUSensor(coordinator, config_entry),
+        KospelWaterTemperatureSensor(coordinator, config_entry),
+        KospelOutsideTemperatureSensor(coordinator, config_entry),
+        KospelReturnTemperatureSensor(coordinator, config_entry),
         KospelPowerSensor(coordinator, config_entry),
         KospelModeSensor(coordinator, config_entry),
-        KospelWaterTemperatureSensor(coordinator, config_entry),
         KospelErrorCodeSensor(coordinator, config_entry),
+        # Raw register debug sensors
+        KospelRawRegisterSensor(coordinator, config_entry, "0c1c", "Current Temperature"),
+        KospelRawRegisterSensor(coordinator, config_entry, "0bb8", "CO Target Temperature"),
+        KospelRawRegisterSensor(coordinator, config_entry, "0bb9", "CWU Target Temperature"),
+        KospelRawRegisterSensor(coordinator, config_entry, "0c1d", "Water Temperature"),
+        KospelRawRegisterSensor(coordinator, config_entry, "0c1e", "Outside Temperature"),
+        KospelRawRegisterSensor(coordinator, config_entry, "0c1f", "Return Temperature"),
+        KospelRawRegisterSensor(coordinator, config_entry, "0b30", "Heater Running"),
+        KospelRawRegisterSensor(coordinator, config_entry, "0b31", "Pump Running"),
+        KospelRawRegisterSensor(coordinator, config_entry, "0b32", "Water Heating"),
+        KospelRawRegisterSensor(coordinator, config_entry, "0b89", "Operating Mode"),
+        KospelRawRegisterSensor(coordinator, config_entry, "0c9f", "Power"),
+        KospelRawRegisterSensor(coordinator, config_entry, "0b62", "Error Code"),
+        # Comprehensive debug sensor
+        KospelAllRegistersDebugSensor(coordinator, config_entry),
     ]
     async_add_entities(entities)
 
@@ -238,6 +258,264 @@ class KospelErrorCodeSensor(KospelSensorBase):
         
         status = self.coordinator.data.get("status", {})
         error_code = status.get("error_code", 0)
-        if error_code == 0:
-            return "mdi:check-circle"
-        return "mdi:alert-circle"
+        if error_code != 0:
+            return "mdi:alert-circle"
+        return "mdi:check-circle"
+
+
+class KospelTargetTemperatureCOSensor(KospelSensorBase):
+    """Sensor for CO (Central Heating) target temperature."""
+
+    _attr_name = "Target Temperature CO"
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self,
+        coordinator: KospelDataUpdateCoordinator,
+        config_entry: ConfigEntry,
+    ) -> None:
+        """Initialize the CO target temperature sensor."""
+        super().__init__(coordinator, config_entry, "target_temperature_co")
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the CO target temperature."""
+        if not self.coordinator.data:
+            return None
+        
+        status = self.coordinator.data.get("status", {})
+        return status.get("target_temperature_co")
+
+    @property
+    def icon(self) -> str:
+        """Return the icon."""
+        return "mdi:thermometer"
+
+
+class KospelTargetTemperatureCWUSensor(KospelSensorBase):
+    """Sensor for CWU (Water Heating) target temperature."""
+
+    _attr_name = "Target Temperature CWU"
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self,
+        coordinator: KospelDataUpdateCoordinator,
+        config_entry: ConfigEntry,
+    ) -> None:
+        """Initialize the CWU target temperature sensor."""
+        super().__init__(coordinator, config_entry, "target_temperature_cwu")
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the CWU target temperature."""
+        if not self.coordinator.data:
+            return None
+        
+        status = self.coordinator.data.get("status", {})
+        return status.get("target_temperature_cwu")
+
+    @property
+    def icon(self) -> str:
+        """Return the icon."""
+        return "mdi:water-thermometer"
+
+
+class KospelOutsideTemperatureSensor(KospelSensorBase):
+    """Sensor for outside temperature."""
+
+    _attr_name = "Outside Temperature"
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self,
+        coordinator: KospelDataUpdateCoordinator,
+        config_entry: ConfigEntry,
+    ) -> None:
+        """Initialize the outside temperature sensor."""
+        super().__init__(coordinator, config_entry, "outside_temperature")
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the outside temperature."""
+        if not self.coordinator.data:
+            return None
+        
+        status = self.coordinator.data.get("status", {})
+        return status.get("outside_temperature")
+
+    @property
+    def icon(self) -> str:
+        """Return the icon."""
+        return "mdi:thermometer-lines"
+
+
+class KospelReturnTemperatureSensor(KospelSensorBase):
+    """Sensor for return temperature."""
+
+    _attr_name = "Return Temperature"
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self,
+        coordinator: KospelDataUpdateCoordinator,
+        config_entry: ConfigEntry,
+    ) -> None:
+        """Initialize the return temperature sensor."""
+        super().__init__(coordinator, config_entry, "return_temperature")
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the return temperature."""
+        if not self.coordinator.data:
+            return None
+        
+        status = self.coordinator.data.get("status", {})
+        return status.get("return_temperature")
+
+    @property
+    def icon(self) -> str:
+        """Return the icon."""
+        return "mdi:thermometer-chevron-down"
+
+
+class KospelRawRegisterSensor(KospelSensorBase):
+    """Sensor for raw register values (debugging)."""
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(
+        self,
+        coordinator: KospelDataUpdateCoordinator,
+        config_entry: ConfigEntry,
+        register_address: str,
+        register_description: str,
+    ) -> None:
+        """Initialize the raw register sensor."""
+        self._register_address = register_address
+        self._register_description = register_description
+        self._attr_name = f"Raw {register_description} ({register_address})"
+        super().__init__(coordinator, config_entry, f"raw_{register_address}")
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the raw register value."""
+        if not self.coordinator.data:
+            return None
+        
+        raw_registers = self.coordinator.data.get("status", {}).get("raw_registers", {})
+        raw_value = raw_registers.get(self._register_address, "0000")
+        
+        # Convert to integer and back to show both hex and decimal
+        try:
+            int_value = int(raw_value, 16)
+            return f"{raw_value} (0x{int_value:04X} = {int_value})"
+        except ValueError:
+            return raw_value
+
+    @property
+    def icon(self) -> str:
+        """Return the icon."""
+        return "mdi:code-brackets"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return additional attributes."""
+        if not self.coordinator.data:
+            return {}
+        
+        raw_registers = self.coordinator.data.get("status", {}).get("raw_registers", {})
+        raw_value = raw_registers.get(self._register_address, "0000")
+        
+        try:
+            int_value = int(raw_value, 16)
+            high_byte = (int_value >> 8) & 0xFF
+            low_byte = int_value & 0xFF
+            
+            return {
+                "register_address": self._register_address,
+                "hex_value": raw_value,
+                "decimal_value": int_value,
+                "high_byte": f"0x{high_byte:02X} ({high_byte})",
+                "low_byte": f"0x{low_byte:02X} ({low_byte})",
+                "binary": f"0b{int_value:016b}",
+                "description": self._register_description,
+            }
+        except ValueError:
+            return {
+                "register_address": self._register_address,
+                "hex_value": raw_value,
+                "error": "Invalid hex value",
+                "description": self._register_description,
+            }
+
+
+class KospelAllRegistersDebugSensor(KospelSensorBase):
+    """Sensor showing all register values for comprehensive debugging."""
+
+    _attr_name = "All Raw Registers"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(
+        self,
+        coordinator: KospelDataUpdateCoordinator,
+        config_entry: ConfigEntry,
+    ) -> None:
+        """Initialize the all registers debug sensor."""
+        super().__init__(coordinator, config_entry, "all_raw_registers")
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the count of available registers."""
+        if not self.coordinator.data:
+            return None
+        
+        raw_registers = self.coordinator.data.get("status", {}).get("raw_registers", {})
+        return f"{len(raw_registers)} registers"
+
+    @property
+    def icon(self) -> str:
+        """Return the icon."""
+        return "mdi:database"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return all register values as attributes."""
+        if not self.coordinator.data:
+            return {}
+        
+        raw_registers = self.coordinator.data.get("status", {}).get("raw_registers", {})
+        
+        attributes = {
+            "register_count": len(raw_registers),
+            "last_update": self.coordinator.data.get("status", {}).get("last_update"),
+        }
+        
+        # Add each register with both hex and decimal values
+        for reg_addr, hex_value in sorted(raw_registers.items()):
+            try:
+                int_value = int(hex_value, 16)
+                attributes[f"reg_{reg_addr}"] = f"{hex_value} ({int_value})"
+            except ValueError:
+                attributes[f"reg_{reg_addr}"] = hex_value
+        
+        # Add a formatted summary for easy copying
+        register_summary = []
+        for reg_addr, hex_value in sorted(raw_registers.items()):
+            try:
+                int_value = int(hex_value, 16)
+                register_summary.append(f"{reg_addr}:{hex_value}({int_value})")
+            except ValueError:
+                register_summary.append(f"{reg_addr}:{hex_value}")
+        
+        attributes["formatted_summary"] = " | ".join(register_summary)
+        
+        return attributes
