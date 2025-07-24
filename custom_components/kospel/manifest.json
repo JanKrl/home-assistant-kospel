@@ -7,6 +7,6 @@
   "documentation": "https://github.com/username/ha-kospel-integration",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/username/ha-kospel-integration/issues",
-  "requirements": ["pymodbus>=3.6.0"],
+  "requirements": ["aiohttp>=3.8.0"],
   "version": "0.1.0"
 }

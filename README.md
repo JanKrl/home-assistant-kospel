@@ -10,13 +10,13 @@
 > This integration is currently in **experimental stage** and under active development. Use at your own risk!
 > 
 > - ⚠️ **Not tested with real hardware yet**
-> - ⚠️ **Modbus register addresses may be incorrect**
+> - ⚠️ **Register parsing logic may be incorrect**
 > - ⚠️ **Breaking changes may occur without notice** 
 > - ⚠️ **No warranty or support guarantees**
 > 
 > **For developers and testers only!** Production use is not recommended at this time.
 
-A Home Assistant integration for Kospel electric heaters that allows you to monitor and control your heating devices via Modbus TCP protocol using the C.MI internet module.
+A Home Assistant integration for Kospel electric heaters that allows you to monitor and control your heating devices via HTTP REST API using the C.MI internet module.
 
 ## Features
 
@@ -25,7 +25,7 @@ A Home Assistant integration for Kospel electric heaters that allows you to moni
 - 💧 Monitor water heating status and temperature  
 - ⚡ Monitor heater running status and power consumption
 - 📊 Monitor operating modes and error codes
-- 🔄 Real-time updates via Modbus TCP
+- 🔄 Real-time updates via HTTP REST API
 - 🏠 Full Home Assistant integration with entities
 
 ## Installation
@@ -37,7 +37,7 @@ A Home Assistant integration for Kospel electric heaters that allows you to moni
 > - Are a developer/tester
 > - Understand the risks
 > - Have Kospel C.MI hardware for testing
-> - Can troubleshoot Modbus issues
+> - Can troubleshoot HTTP API issues
 
 ### HACS (Recommended)
 
@@ -84,11 +84,11 @@ This integration is designed to work with Kospel electric heaters equipped with 
 
 - Kospel EPO/EPV series with C.MI
 - Kospel EKC series with C.MI  
-- Any Kospel heater with C.MI module that supports Modbus TCP
+- Any Kospel heater with C.MI module that supports HTTP REST API
 
 ## Protocol Details
 
-The integration uses **Modbus TCP** protocol to communicate with Kospel heaters through the C.MI internet module. The following data is monitored and controlled:
+The integration uses **HTTP REST API** to communicate with Kospel heaters through the C.MI internet module. The following data is monitored and controlled:
 
 ### Monitored Values
 - Current room temperature
@@ -113,7 +113,7 @@ This integration is currently in **experimental development phase**. Implementat
 
 ### ✅ **Completed (Theoretical)**
 - Basic project structure with HACS support
-- Modbus TCP communication protocol implementation
+- HTTP REST API communication protocol implementation
 - Temperature reading and control logic
 - Water heating monitoring and control logic
 - Operating mode control implementation
@@ -121,13 +121,13 @@ This integration is currently in **experimental development phase**. Implementat
 
 ### ⚠️ **CRITICAL LIMITATIONS**
 - **NOT TESTED** with real Kospel C.MI hardware
-- **UNKNOWN** if Modbus register addresses are correct
+- **UNKNOWN** if register parsing logic is correct
 - **NO VALIDATION** of actual device communication
 - **POTENTIAL** for device damage if registers are wrong
 
 ### 🚧 **In Development**
 - Hardware testing and validation
-- Register address verification
+- Register parsing verification
 - Error handling improvements
 - Advanced features and configuration options
 - Multi-zone support
@@ -135,7 +135,7 @@ This integration is currently in **experimental development phase**. Implementat
 
 ### 🎯 **Testing Needed**
 - Real Kospel C.MI hardware validation
-- Modbus register mapping verification
+- Register parsing mapping verification
 - Temperature control testing
 - Water heating control testing
 - Error condition handling
@@ -145,11 +145,11 @@ This integration is currently in **experimental development phase**. Implementat
 > [!IMPORTANT]
 > **DISCLAIMER: USE AT YOUR OWN RISK**
 
-⚠️ **Protocol Implementation**: The Modbus register addresses used in this integration are **ESTIMATED** based on common heating system implementations and research. Since official Kospel C.MI Modbus documentation was not publicly available, the actual register addresses may need adjustment based on your specific device.
+⚠️ **Protocol Implementation**: The register parsing logic used in this integration is based on analysis of actual API responses. However, the interpretation of register values may not be completely accurate and might need adjustment based on your specific device behavior.
 
-⚠️ **Potential Risks**: Incorrect Modbus commands could potentially damage your heating system. The authors are not responsible for any damage caused by using this integration.
+⚠️ **Potential Risks**: Incorrect API commands could potentially damage your heating system. The authors are not responsible for any damage caused by using this integration.
 
-🔧 **For Developers**: If you have access to official Kospel C.MI Modbus documentation or have successfully tested this integration, please contribute by opening issues or pull requests with correct register mappings.
+🔧 **For Developers**: If you have access to official Kospel C.MI API documentation or have successfully tested this integration, please contribute by opening issues or pull requests with correct register interpretations.
 
 📋 **Before Using**: 
 - Backup your heater settings
