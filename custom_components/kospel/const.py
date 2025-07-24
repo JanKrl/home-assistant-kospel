@@ -5,13 +5,11 @@ DOMAIN = "kospel"
 # Configuration keys
 CONF_HOST = "host"
 CONF_PORT = "port"
-CONF_SLAVE_ID = "slave_id"
 CONF_USERNAME = "username"
 CONF_PASSWORD = "password"
 
 # Default values  
-DEFAULT_PORT = 502  # Modbus TCP default port
-DEFAULT_SLAVE_ID = 1  # Default Modbus slave ID
+DEFAULT_PORT = 80  # HTTP default port
 DEFAULT_SCAN_INTERVAL = 30
 
 # Device information
@@ -35,9 +33,9 @@ TEMP_STEP = 0.5
 MIN_WATER_TEMP = 20
 MAX_WATER_TEMP = 60
 
-# Modbus specific constants
-MODBUS_TIMEOUT = 5
-MODBUS_RETRIES = 3
+# HTTP API specific constants
+HTTP_TIMEOUT = 10
+API_DEV_ENDPOINT = "/api/dev"
 
 # Entity names
 ENTITY_HEATER = "heater"

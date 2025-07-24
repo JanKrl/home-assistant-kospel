@@ -10,8 +10,9 @@ from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNA
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import DEFAULT_PORT, DEFAULT_SLAVE_ID, CONF_SLAVE_ID, DOMAIN
+from .const import DEFAULT_PORT, DOMAIN
 from .api import KospelAPI
 
 _LOGGER = logging.getLogger(__name__)
@@ -20,7 +21,6 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_HOST): str,
         vol.Optional(CONF_PORT, default=DEFAULT_PORT): int,
-        vol.Optional(CONF_SLAVE_ID, default=DEFAULT_SLAVE_ID): int,
         vol.Optional(CONF_USERNAME): str,
         vol.Optional(CONF_PASSWORD): str,
     }
@@ -32,10 +32,12 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
 
     Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
     """
+    session = async_get_clientsession(hass)
+    
     api = KospelAPI(
+        session=session,
         host=data[CONF_HOST],
         port=data.get(CONF_PORT, DEFAULT_PORT),
-        slave_id=data.get(CONF_SLAVE_ID, DEFAULT_SLAVE_ID),
         username=data.get(CONF_USERNAME),
         password=data.get(CONF_PASSWORD),
     )

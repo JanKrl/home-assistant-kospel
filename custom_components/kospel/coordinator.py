@@ -6,6 +6,7 @@ from datetime import timedelta
 from typing import Any
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import KospelAPI, KospelAPIError
@@ -21,8 +22,7 @@ class KospelDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self,
         hass: HomeAssistant,
         host: str,
-        port: int = 502,
-        slave_id: int = 1,
+        port: int = 80,
         username: str | None = None,
         password: str | None = None,
     ) -> None:
@@ -34,10 +34,12 @@ class KospelDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL),
         )
         
+        session = async_get_clientsession(hass)
+        
         self.api = KospelAPI(
+            session=session,
             host=host,
             port=port,
-            slave_id=slave_id,
             username=username,
             password=password,
         )

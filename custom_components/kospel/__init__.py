@@ -6,7 +6,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform, CONF_HOST, CONF_PORT, CONF_USERNAME, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN, CONF_SLAVE_ID
+from .const import DOMAIN, DEFAULT_PORT
 from .coordinator import KospelDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -24,8 +24,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = KospelDataUpdateCoordinator(
         hass=hass,
         host=entry.data[CONF_HOST],
-        port=entry.data.get(CONF_PORT, 502),
-        slave_id=entry.data.get(CONF_SLAVE_ID, 1),
+        port=entry.data.get(CONF_PORT, DEFAULT_PORT),
         username=entry.data.get(CONF_USERNAME),
         password=entry.data.get(CONF_PASSWORD),
     )
