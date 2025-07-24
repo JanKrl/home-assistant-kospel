@@ -186,6 +186,12 @@ ERROR (MainThread) [custom_components.kospel.api] Failed to get status: Device I
        custom_components.kospel: debug
    ```
 
+#### ❌ "AttributeError: type object 'SensorDeviceClass' has no attribute 'RUNNING'"
+
+This error occurred in older versions and has been fixed by converting the running status sensors to binary sensors.
+
+**Solution**: Update to version 0.1.2 or later. The water heating and heater running sensors are now properly implemented as binary sensors.
+
 #### 🔄 Integration Won't Initialize
 
 1. Remove and re-add the integration
