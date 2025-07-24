@@ -217,16 +217,54 @@ If you still see incorrect temperatures after updating to v0.1.3+:
 3. Report the issue with your device model, firmware version, and expected vs actual values
 4. The parsing logic continues to be refined based on user feedback
 
-### Testing Your Setup
+## Debugging Features (v0.1.4+)
 
-Use the included test script to verify your setup:
+To help identify and fix register parsing issues, the integration now includes comprehensive debugging sensors:
+
+### Raw Register Sensors
+Each important register has a corresponding "Raw" diagnostic sensor that shows:
+- **Raw hex value** from the device
+- **Decimal equivalent** 
+- **High/low byte breakdown**
+- **Binary representation**
+
+Look for entities named like:
+- `Raw Current Temperature (0c1c)`
+- `Raw CO Target Temperature (0bb8)`
+- `Raw CWU Target Temperature (0bb9)`
+- etc.
+
+### All Registers Debug Sensor
+The `All Raw Registers` sensor provides:
+- **Complete register dump** as entity attributes
+- **Formatted summary** for easy copying/pasting
+- **Register count** as the main state
+
+### Debug Helper Script
+Use the included `debug_helper.py` script to:
+1. **Compare manufacturer values** with register values
+2. **Test all parsing methods** automatically  
+3. **Identify the correct interpretation** for each register
 
 ```bash
-cd /path/to/ha-kospel-integration
-python3 test_device_discovery.py
+python3 debug_helper.py
 ```
 
-Update the `host` variable in the script with your device's IP address.
+### How to Debug Temperature Issues
+
+1. **Note the manufacturer value** from the official frontend
+2. **Find the corresponding raw register value** in Home Assistant (e.g., `Raw Current Temperature (0c1c)`)
+3. **Use the debug helper script** to compare all parsing methods
+4. **Report findings** with the register address, raw value, manufacturer value, and which parsing method matches
+
+### Testing Your Setup
+
+You can verify your device connectivity by checking the Home Assistant logs:
+1. Enable debug logging for `custom_components.kospel`
+2. Restart Home Assistant
+3. Check logs for successful device discovery and register retrieval
+
+The raw register debug sensors will show "0000" values if communication fails.
 
 ## Contributing
 
