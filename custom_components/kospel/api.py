@@ -82,12 +82,12 @@ class KospelAPI:
             
             status_data = {
                 # Temperature readings
-                "current_temperature": self._parse_temperature(registers.get("0c1c", "0000")),
-                "target_temperature_co": self._parse_temperature(registers.get("0bb8", "0000")),  # CO set temp
-                "target_temperature_cwu": self._parse_temperature(registers.get("0bb9", "0000")),  # CWU set temp
-                "water_temperature": self._parse_temperature(registers.get("0c1d", "0000")),
-                "outside_temperature": self._parse_temperature(registers.get("0c1e", "0000")),
-                "return_temperature": self._parse_temperature(registers.get("0c1f", "0000")),
+                "current_temperature": self._parse_temperature(registers.get("0c1c", "0000"), "0c1c"),
+                "target_temperature_co": self._parse_temperature(registers.get("0bb8", "0000"), "0bb8"),  # CO set temp
+                "target_temperature_cwu": self._parse_temperature(registers.get("0bb9", "0000"), "0bb9"),  # CWU set temp
+                "water_temperature": self._parse_temperature(registers.get("0c1d", "0000"), "0c1d"),
+                "outside_temperature": self._parse_temperature(registers.get("0c1e", "0000"), "0c1e"),
+                "return_temperature": self._parse_temperature(registers.get("0c1f", "0000"), "0c1f"),
                 
                 # Status indicators
                 "heater_running": self._parse_boolean(registers.get("0b30", "0000")),
@@ -215,26 +215,80 @@ class KospelAPI:
         except (aiohttp.ClientError, json.JSONDecodeError) as exc:
             raise KospelAPIError(f"Request failed: {exc}") from exc
 
-    def _parse_temperature(self, hex_value: str) -> float | None:
-        """Parse temperature from hex register value."""
+    def _parse_temperature(self, hex_value: str, register_addr: str = "") -> float | None:
+        """Parse temperature from hex register value.
+        
+        Different register ranges may use different encoding methods.
+        """
         try:
             # Convert hex to integer
             value = int(hex_value, 16)
             if value == 0xFFFF:  # Invalid/not available
                 return None
             
-            # Based on register analysis, the pattern is:
-            # Little-endian byte order, divided by 10
-            # Examples:
-            # 4a01 → 0x014a (330) → 33.0°C ✓
-            # e001 → 0x01e0 (480) → 48.0°C ✓  
-            # 3201 → 0x0132 (306) → 30.6°C ✓
+            # Determine parsing method based on register address range
+            if register_addr:
+                addr_int = int(register_addr, 16)
+                
+                # 0x0c1c-0x0c1f range: Current/measured temperatures (use LE/10)
+                if 0x0c1c <= addr_int <= 0x0c1f:
+                    little_endian = ((value & 0xFF) << 8) | ((value >> 8) & 0xFF)
+                    temperature = little_endian / 10.0
+                    _LOGGER.debug("Temperature parsing (measured) for %s@%s: LE %d → %.1f°C", 
+                                 hex_value, register_addr, little_endian, temperature)
+                    return temperature
+                
+                # 0x0bb8-0x0bb9 range: Target/setpoint temperatures
+                # These might be encoded differently or be indices
+                elif 0x0bb8 <= addr_int <= 0x0bb9:
+                    # Try multiple methods for target temperatures
+                    methods = []
+                    
+                    # Method 1: Little-endian / 10
+                    le_value = ((value & 0xFF) << 8) | ((value >> 8) & 0xFF)
+                    methods.append(("LE/10", le_value / 10.0))
+                    
+                    # Method 2: Big-endian / 10  
+                    methods.append(("BE/10", value / 10.0))
+                    
+                    # Method 3: High byte as main temperature
+                    high_byte = (value >> 8) & 0xFF
+                    low_byte = value & 0xFF
+                    if high_byte > 0 and high_byte < 100:  # Reasonable temperature range
+                        methods.append(("HB", float(high_byte)))
+                    
+                    # Method 4: Low byte as main temperature  
+                    if low_byte > 0 and low_byte < 100:  # Reasonable temperature range
+                        methods.append(("LB", float(low_byte)))
+                    
+                    # Method 5: Check if it's an index (values like 7°C might be stored as index)
+                    # Common heating setpoints: 5, 6, 7, 8, 9, 10, etc.
+                    if value in range(50, 150):  # 5.0-15.0°C range encoded as 50-150
+                        methods.append(("INDEX/10", value / 10.0))
+                    
+                    # For now, log all methods and use the most reasonable one
+                    _LOGGER.warning("Target temperature parsing for %s@%s (value=%d):", 
+                                   hex_value, register_addr, value)
+                    for method_name, temp in methods:
+                        _LOGGER.warning("  %s: %.1f°C", method_name, temp)
+                    
+                    # Use the first reasonable method (5-30°C range)
+                    for method_name, temp in methods:
+                        if 5.0 <= temp <= 30.0:
+                            _LOGGER.warning("  → Using %s: %.1f°C", method_name, temp)
+                            return temp
+                    
+                    # If no reasonable method found, use LE/10 as fallback
+                    temperature = le_value / 10.0
+                    _LOGGER.warning("  → Using fallback LE/10: %.1f°C", temperature)
+                    return temperature
             
-            # Convert from little-endian and divide by 10
+            # Default method for unknown registers: Little-endian / 10
             little_endian = ((value & 0xFF) << 8) | ((value >> 8) & 0xFF)
             temperature = little_endian / 10.0
             
-            _LOGGER.debug("Temperature parsing for %s: LE %d → %.1f°C", hex_value, little_endian, temperature)
+            _LOGGER.debug("Temperature parsing (default) for %s: LE %d → %.1f°C", 
+                         hex_value, little_endian, temperature)
             return temperature
             
         except (ValueError, TypeError):
