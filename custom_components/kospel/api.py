@@ -43,12 +43,16 @@ class KospelAPI:
         self._password = password
         self._base_url = f"http://{host}:{port}"
         self._device_id = None
+        self._ekd_device_id = None
 
     async def test_connection(self) -> bool:
-        """Test connection to the device and discover device ID."""
+        """Test connection to the device and discover device IDs."""
         try:
-            # Discover available devices
+            # Discover device ID for legacy API (used for initial discovery)
             await self._discover_device_id()
+            
+            # Discover EKD device ID for EKD API (different ID format)
+            await self._discover_ekd_device_id()
             
             # Test if EKD API endpoint exists
             if not await self._test_ekd_endpoint():
@@ -72,10 +76,14 @@ class KospelAPI:
     async def get_status(self) -> dict[str, Any]:
         """Get current status from the heater."""
         try:
-            # Ensure device ID is discovered before attempting to get registers
+            # Ensure both device IDs are discovered before attempting EKD API calls
             if not self._device_id:
                 _LOGGER.debug("Device ID not yet discovered, attempting discovery...")
                 await self._discover_device_id()
+                
+            if not self._ekd_device_id:
+                _LOGGER.debug("EKD device ID not yet discovered, attempting discovery...")
+                await self._discover_ekd_device_id()
             
             # Use EKD API exclusively - this is the manufacturer's preferred method
             _LOGGER.info("Retrieving data via EKD API...")
@@ -171,16 +179,45 @@ class KospelAPI:
             _LOGGER.error("Device discovery failed: %s", exc)
             raise KospelConnectionError("Unable to discover device") from exc
 
+    async def _discover_ekd_device_id(self) -> None:
+        """Discover EKD device ID using the sessionDevice endpoint."""
+        try:
+            async with asyncio.timeout(10):
+                response = await self._session.get(
+                    f"{self._base_url}/api/sessionDevice",
+                    headers={
+                        "Accept": "application/vnd.kospel.cmi-v1+json"
+                    }
+                )
+                
+                if response.status >= 400:
+                    raise KospelConnectionError(f"sessionDevice API HTTP error {response.status}")
+                
+                data = await response.json()
+                
+                if "sessionDevice" not in data:
+                    raise KospelConnectionError("sessionDevice API returned no device ID")
+                
+                self._ekd_device_id = data["sessionDevice"]
+                _LOGGER.info("Discovered EKD device ID: %s", self._ekd_device_id)
+                
+        except asyncio.TimeoutError as exc:
+            _LOGGER.error("EKD device discovery timeout")
+            raise KospelConnectionError("EKD device discovery timeout") from exc
+        except (aiohttp.ClientError, json.JSONDecodeError) as exc:
+            _LOGGER.error("EKD device discovery failed: %s", exc)
+            raise KospelConnectionError("Unable to discover EKD device ID") from exc
+
 
 
     async def _test_ekd_endpoint(self) -> bool:
         """Test if the EKD API endpoint exists on this device."""
-        if not self._device_id:
+        if not self._ekd_device_id:
             return False
         
         try:
             # Try a simple test with minimal variables
-            test_url = f"{self._base_url}/api/ekd/read/{self._device_id}"
+            test_url = f"{self._base_url}/api/ekd/read/{self._ekd_device_id}"
             test_variables = ["TEMP_ROOM"]  # Just test with one common variable
             
             async with asyncio.timeout(5):
@@ -203,8 +240,8 @@ class KospelAPI:
 
     async def _get_ekd_data(self) -> dict[str, Any]:
         """Get data using the EKD API (manufacturer's preferred method)."""
-        if not self._device_id:
-            raise KospelAPIError("Device ID not discovered yet")
+        if not self._ekd_device_id:
+            raise KospelAPIError("EKD device ID not discovered yet")
         
         # Variables from the manufacturer's frontend ref_start() function
         variables = [
@@ -248,7 +285,7 @@ class KospelAPI:
         ]
         
         try:
-            url = f"{self._base_url}/api/ekd/read/{self._device_id}"
+            url = f"{self._base_url}/api/ekd/read/{self._ekd_device_id}"
             headers = {
                 "Accept": "application/vnd.kospel.cmi-v1+json",
                 "Content-Type": "application/json"
