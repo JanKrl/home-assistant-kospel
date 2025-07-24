@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .api import KospelAPI, KospelAPIError
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
@@ -67,7 +68,7 @@ class KospelDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             data = {
                 "status": status_data,
                 "settings": settings_data,
-                "last_update": self.hass.helpers.event.utcnow(),
+                "last_update": dt_util.utcnow(),
             }
             
             _LOGGER.debug("Successfully updated data: %s", data)
