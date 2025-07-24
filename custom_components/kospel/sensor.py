@@ -32,9 +32,13 @@ async def async_setup_entry(
     entities = [
         KospelTemperatureSensor(coordinator, config_entry),
         KospelTargetTemperatureSensor(coordinator, config_entry),
+        KospelTargetTemperatureCOSensor(coordinator, config_entry),
+        KospelTargetTemperatureCWUSensor(coordinator, config_entry),
+        KospelWaterTemperatureSensor(coordinator, config_entry),
+        KospelOutsideTemperatureSensor(coordinator, config_entry),
+        KospelReturnTemperatureSensor(coordinator, config_entry),
         KospelPowerSensor(coordinator, config_entry),
         KospelModeSensor(coordinator, config_entry),
-        KospelWaterTemperatureSensor(coordinator, config_entry),
         KospelErrorCodeSensor(coordinator, config_entry),
     ]
     async_add_entities(entities)
@@ -238,6 +242,130 @@ class KospelErrorCodeSensor(KospelSensorBase):
         
         status = self.coordinator.data.get("status", {})
         error_code = status.get("error_code", 0)
-        if error_code == 0:
-            return "mdi:check-circle"
-        return "mdi:alert-circle"
+        if error_code != 0:
+            return "mdi:alert-circle"
+        return "mdi:check-circle"
+
+
+class KospelTargetTemperatureCOSensor(KospelSensorBase):
+    """Sensor for CO (Central Heating) target temperature."""
+
+    _attr_name = "Target Temperature CO"
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self,
+        coordinator: KospelDataUpdateCoordinator,
+        config_entry: ConfigEntry,
+    ) -> None:
+        """Initialize the CO target temperature sensor."""
+        super().__init__(coordinator, config_entry, "target_temperature_co")
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the CO target temperature."""
+        if not self.coordinator.data:
+            return None
+        
+        status = self.coordinator.data.get("status", {})
+        return status.get("target_temperature_co")
+
+    @property
+    def icon(self) -> str:
+        """Return the icon."""
+        return "mdi:thermometer"
+
+
+class KospelTargetTemperatureCWUSensor(KospelSensorBase):
+    """Sensor for CWU (Water Heating) target temperature."""
+
+    _attr_name = "Target Temperature CWU"
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self,
+        coordinator: KospelDataUpdateCoordinator,
+        config_entry: ConfigEntry,
+    ) -> None:
+        """Initialize the CWU target temperature sensor."""
+        super().__init__(coordinator, config_entry, "target_temperature_cwu")
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the CWU target temperature."""
+        if not self.coordinator.data:
+            return None
+        
+        status = self.coordinator.data.get("status", {})
+        return status.get("target_temperature_cwu")
+
+    @property
+    def icon(self) -> str:
+        """Return the icon."""
+        return "mdi:water-thermometer"
+
+
+class KospelOutsideTemperatureSensor(KospelSensorBase):
+    """Sensor for outside temperature."""
+
+    _attr_name = "Outside Temperature"
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self,
+        coordinator: KospelDataUpdateCoordinator,
+        config_entry: ConfigEntry,
+    ) -> None:
+        """Initialize the outside temperature sensor."""
+        super().__init__(coordinator, config_entry, "outside_temperature")
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the outside temperature."""
+        if not self.coordinator.data:
+            return None
+        
+        status = self.coordinator.data.get("status", {})
+        return status.get("outside_temperature")
+
+    @property
+    def icon(self) -> str:
+        """Return the icon."""
+        return "mdi:thermometer-lines"
+
+
+class KospelReturnTemperatureSensor(KospelSensorBase):
+    """Sensor for return temperature."""
+
+    _attr_name = "Return Temperature"
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self,
+        coordinator: KospelDataUpdateCoordinator,
+        config_entry: ConfigEntry,
+    ) -> None:
+        """Initialize the return temperature sensor."""
+        super().__init__(coordinator, config_entry, "return_temperature")
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the return temperature."""
+        if not self.coordinator.data:
+            return None
+        
+        status = self.coordinator.data.get("status", {})
+        return status.get("return_temperature")
+
+    @property
+    def icon(self) -> str:
+        """Return the icon."""
+        return "mdi:thermometer-chevron-down"

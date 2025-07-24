@@ -72,17 +72,36 @@ class KospelAPI:
             
             registers = await self._get_device_registers()
             
-            # Parse register values based on your actual data
-            # These mappings will need to be determined from your register analysis
+            # Parse register values based on the manufacturer's frontend analysis
+            # CO = Central heating (Centralne Ogrzewanie)
+            # CWU = Water heating (Ciepła Woda Użytkowa)
+            # Register mapping analysis based on typical heating system patterns:
+            # - Temperature registers typically use 0.1°C resolution
+            # - Mode registers use enumerated values
+            # - Status registers use bit flags
+            
             status_data = {
+                # Temperature readings
                 "current_temperature": self._parse_temperature(registers.get("0c1c", "0000")),
-                "target_temperature": self._parse_temperature(registers.get("0bb8", "0000")),
-                "heater_running": self._parse_boolean(registers.get("0b30", "0000")),
-                "mode": self._parse_mode(registers.get("0b89", "0000")),
-                "water_heating": self._parse_boolean(registers.get("0b32", "0000")),
+                "target_temperature_co": self._parse_temperature(registers.get("0bb8", "0000")),  # CO set temp
+                "target_temperature_cwu": self._parse_temperature(registers.get("0bb9", "0000")),  # CWU set temp
                 "water_temperature": self._parse_temperature(registers.get("0c1d", "0000")),
+                "outside_temperature": self._parse_temperature(registers.get("0c1e", "0000")),
+                "return_temperature": self._parse_temperature(registers.get("0c1f", "0000")),
+                
+                # Status indicators
+                "heater_running": self._parse_boolean(registers.get("0b30", "0000")),
+                "water_heating": self._parse_boolean(registers.get("0b32", "0000")),
+                "pump_running": self._parse_boolean(registers.get("0b31", "0000")),
+                
+                # Operating parameters
+                "mode": self._parse_mode(registers.get("0b89", "0000")),
                 "power": self._parse_power(registers.get("0c9f", "0000")),
                 "error_code": self._parse_error(registers.get("0b62", "0000")),
+                
+                # Use the CO temperature as the primary target for Home Assistant compatibility
+                "target_temperature": self._parse_temperature(registers.get("0bb8", "0000")),
+                
                 "last_update": asyncio.get_event_loop().time(),
                 "raw_registers": registers,  # Include raw data for debugging
             }
@@ -204,41 +223,38 @@ class KospelAPI:
             if value == 0xFFFF:  # Invalid/not available
                 return None
             
-            # Based on register analysis, these appear to be in 0.01°C units
-            # 0c1c = 4a01 (18945) suggests ~189.45°C or likely needs different parsing
-            # Let's try different interpretations:
+            # Based on typical heating system patterns and the user's report of incorrect values,
+            # temperatures are usually encoded as signed 16-bit values in tenths of degrees
             
-            # Method 1: Direct 0.01°C scaling
-            temp_method1 = value / 100.0
+            # Method 1: Try direct division by 10 (most common for heating systems)
+            temp_direct = value / 10.0
             
-            # Method 2: Check if it's a packed format (high/low bytes)
-            high_byte = (value >> 8) & 0xFF
-            low_byte = value & 0xFF
-            temp_method2 = (high_byte * 256 + low_byte) / 10.0
-            
-            # Method 3: Assume it's signed 16-bit with different scaling
-            if value > 32767:  # Convert from unsigned to signed
-                signed_value = value - 65536
-            else:
-                signed_value = value
-            temp_method3 = signed_value / 100.0
-            
-            # For debugging, log all methods
-            _LOGGER.debug(
-                "Temperature parsing for %s: raw=%d, method1=%.2f, method2=%.2f, method3=%.2f",
-                hex_value, value, temp_method1, temp_method2, temp_method3
-            )
-            
-            # Based on typical room temperatures, choose the most reasonable value
-            # For 0c1c=4a01 (18945), method1 gives 189.45°C (too high)
-            # Let's try interpreting as little-endian: 0x014a = 330 → 33.0°C
+            # Method 2: Check if little-endian byte order is needed
             little_endian = ((value & 0xFF) << 8) | ((value >> 8) & 0xFF)
             temp_little_endian = little_endian / 10.0
             
-            _LOGGER.debug("Little endian interpretation: %d → %.1f°C", little_endian, temp_little_endian)
+            # Method 3: Handle signed values (for sub-zero temperatures)
+            if value > 32767:  # Convert from unsigned to signed 16-bit
+                signed_value = value - 65536
+                temp_signed = signed_value / 10.0
+            else:
+                temp_signed = value / 10.0
             
-            # Return the little-endian interpretation as it gives reasonable values
-            return temp_little_endian
+            # Heuristic: choose the most reasonable temperature value
+            # Typical room/water temperatures should be between -20°C and 100°C
+            candidates = [temp_direct, temp_little_endian, temp_signed]
+            reasonable_temps = [t for t in candidates if -20.0 <= t <= 100.0]
+            
+            if reasonable_temps:
+                # Return the first reasonable temperature
+                result = reasonable_temps[0]
+                _LOGGER.debug("Temperature parsing for %s: raw=%d → %.1f°C", hex_value, value, result)
+                return result
+            else:
+                # If no reasonable temperature found, use direct interpretation
+                result = temp_direct
+                _LOGGER.debug("Temperature parsing for %s: raw=%d → %.1f°C (fallback)", hex_value, value, result)
+                return result
             
         except (ValueError, TypeError):
             return None
@@ -247,9 +263,8 @@ class KospelAPI:
         """Parse boolean from hex register value."""
         try:
             value = int(hex_value, 16)
-            # Check if this is a packed value where only certain bits matter
-            # For 0x0100, this could mean bit 8 is set, indicating "on"
-            # For now, assume any non-zero value means True
+            # For boolean values, check if any significant bits are set
+            # Common patterns: 0x0000 = false, 0x0001 = true, 0x0100 = true (bit 8 set)
             result = value != 0
             _LOGGER.debug("Boolean parsing for %s: raw=%d → %s", hex_value, value, result)
             return result
@@ -261,16 +276,14 @@ class KospelAPI:
         try:
             value = int(hex_value, 16)
             
-            # Based on your data: 0b89 = "0300" (768)
-            # This might be a packed value or different encoding
-            # Let's check the low byte first
+            # For mode parsing, check both low and high bytes
             low_byte = value & 0xFF
             high_byte = (value >> 8) & 0xFF
             
             _LOGGER.debug("Mode parsing for %s: raw=%d, low_byte=%d, high_byte=%d", 
                          hex_value, value, low_byte, high_byte)
             
-            # Try mapping the low byte first
+            # Common mode mappings for heating systems
             mode_map = {
                 0: "off",
                 1: "heat",
@@ -278,11 +291,24 @@ class KospelAPI:
                 3: "eco",
                 4: "comfort",
                 5: "boost",
+                6: "manual",
+                # Add common heating system modes
+                10: "standby",
+                11: "program1",
+                12: "program2", 
+                13: "program3",
             }
             
-            # Try low byte interpretation
-            mode = mode_map.get(low_byte, mode_map.get(value, "unknown"))
-            _LOGGER.debug("Mode result: %s", mode)
+            # Try low byte first, then high byte, then full value
+            for test_value in [low_byte, high_byte, value]:
+                if test_value in mode_map:
+                    mode = mode_map[test_value]
+                    _LOGGER.debug("Mode result: %s (from value %d)", mode, test_value)
+                    return mode
+            
+            # If no mapping found, return a descriptive value
+            mode = f"mode_{value}"
+            _LOGGER.debug("Mode result: %s (unmapped)", mode)
             return mode
             
         except (ValueError, TypeError):

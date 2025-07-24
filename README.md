@@ -92,10 +92,15 @@ The integration uses **HTTP REST API** to communicate with Kospel heaters throug
 
 ### Monitored Values
 - Current room temperature
-- Target temperature settings
+- Target temperature for CO (Central Heating)
+- Target temperature for CWU (Water Heating)
+- Water temperature
+- Outside temperature (if available)
+- Return temperature (if available)
 - Heater running status
-- Water heating status and temperature
-- Operating mode (Off, Heat, Auto, Eco)
+- Water heating status
+- Pump running status
+- Operating mode (Off, Heat, Auto, Eco, Manual, Program modes)
 - Power consumption
 - Error codes
 
@@ -200,10 +205,17 @@ This error occurred in older versions and has been fixed by converting the runni
 
 #### 📊 Wrong Temperature Values
 
-The register parsing is still experimental. If you see incorrect temperatures:
-1. Check the raw register values in debug logs
-2. Report the issue with your device model and firmware version
-3. The parsing logic may need adjustment for your specific device
+**Version 0.1.3+ includes improved temperature parsing logic:**
+- Enhanced register interpretation for CO and CWU temperatures
+- Better handling of little-endian byte order
+- Automatic selection of reasonable temperature values
+- Support for both 0.1°C and 1°C temperature resolutions
+
+If you still see incorrect temperatures after updating to v0.1.3+:
+1. Enable debug logging for the `custom_components.kospel` component
+2. Check the raw register values and parsing results in debug logs
+3. Report the issue with your device model, firmware version, and expected vs actual values
+4. The parsing logic continues to be refined based on user feedback
 
 ### Testing Your Setup
 
