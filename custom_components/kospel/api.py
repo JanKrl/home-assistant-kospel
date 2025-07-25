@@ -190,23 +190,43 @@ class KospelAPI:
                     }
                 )
                 
-                if response.status >= 400:
-                    raise KospelConnectionError(f"sessionDevice API HTTP error {response.status}")
+                if response.status == 404:
+                    _LOGGER.warning("sessionDevice endpoint not found - device may not support this API version")
+                    # Try using the regular device ID as fallback
+                    self._ekd_device_id = self._device_id
+                    _LOGGER.info("Using fallback device ID for EKD API: %s", self._ekd_device_id)
+                    return
+                elif response.status == 500:
+                    _LOGGER.warning("sessionDevice endpoint returned HTTP 500 - trying fallback")
+                    # Try using the regular device ID as fallback
+                    self._ekd_device_id = self._device_id
+                    _LOGGER.info("Using fallback device ID for EKD API: %s", self._ekd_device_id)
+                    return
+                elif response.status >= 400:
+                    _LOGGER.warning("sessionDevice API HTTP error %s - using fallback device ID", response.status)
+                    self._ekd_device_id = self._device_id
+                    _LOGGER.info("Using fallback device ID for EKD API: %s", self._ekd_device_id)
+                    return
                 
                 data = await response.json()
                 
                 if "sessionDevice" not in data:
-                    raise KospelConnectionError("sessionDevice API returned no device ID")
+                    _LOGGER.warning("sessionDevice API returned no device ID - using fallback")
+                    self._ekd_device_id = self._device_id
+                    _LOGGER.info("Using fallback device ID for EKD API: %s", self._ekd_device_id)
+                    return
                 
                 self._ekd_device_id = data["sessionDevice"]
                 _LOGGER.info("Discovered EKD device ID: %s", self._ekd_device_id)
                 
-        except asyncio.TimeoutError as exc:
-            _LOGGER.error("EKD device discovery timeout")
-            raise KospelConnectionError("EKD device discovery timeout") from exc
+        except asyncio.TimeoutError:
+            _LOGGER.warning("EKD device discovery timeout - using fallback device ID")
+            self._ekd_device_id = self._device_id
+            _LOGGER.info("Using fallback device ID for EKD API: %s", self._ekd_device_id)
         except (aiohttp.ClientError, json.JSONDecodeError) as exc:
-            _LOGGER.error("EKD device discovery failed: %s", exc)
-            raise KospelConnectionError("Unable to discover EKD device ID") from exc
+            _LOGGER.warning("EKD device discovery failed (%s) - using fallback device ID", exc)
+            self._ekd_device_id = self._device_id
+            _LOGGER.info("Using fallback device ID for EKD API: %s", self._ekd_device_id)
 
 
 
@@ -245,43 +265,9 @@ class KospelAPI:
         
         # Variables from the manufacturer's frontend ref_start() function
         variables = [
-            "TEMP_ROOM",                    # Room temperature (current)
-            "ROOM_TEMP_SETTING",            # Room temperature setting (target CO)
-            "TEMP_EXT",                     # External temperature (outside)
-            "DHW_TEMP_SETTING",             # DHW temperature setting (target CWU)
-            "DHW_SUPPLY_TEMP",              # DHW supply temperature (water temp)
-            "FLAG_BUFFER_TIMETABLE_LOADING_TASK",
-            "OPERATING_MODE",               # Operating mode
-            "ROOM_TEMP_SETTING_INDEX",      # Room temperature setting index
-            "FLAG_ROOM_REGULATOR_INT_EXT",
-            "FLAG_CH_MANUAL_AUTO_SETTING",
-            "DHW_TEMP_SETTING_INDEX",       # DHW temperature setting index
-            "FLAG_DHW_ACTIVATION_NO_YES",
-            "FLAG_DHW_TERMOSTAT_INT_EXT",
-            "FLAG_MANUAL_MODE_ROOM_TEMP",
-            "FLAG_PARTY_MODE",
-            "FLAG_VACATION_MODE",
-            "FLAG_SUMMER_MODE",
-            "FLAG_WINTER_MODE",
-            "FLAG_TURBO_MODE_IN_PROGRESS",
-            "FLAG_TURBO_MODE_CONDITION_FULFILLED",
-            "FLAG_EEPROM_ERROR",
-            "FLAG_TEMP_IN_ERROR",
-            "FLAG_TEMP_OUT_ERROR",
-            "FLAG_SUPPLY_TEMP_ERROR",
-            "FLAG_TEMP_INT_ERROR",
-            "FLAG_TEMP_EXT_ERROR",
-            "FLAG_TEMP_ROOM_ERROR",
-            "FLAG_LOW_BATTERY_ERROR",
-            "FLAG_PREASSURE_ERROR",
-            "FLAG_CH_PUMP_ERROR",
-            "FLAG_CH_VALVE_ERROR",
-            "FLAG_DHW_VALVE_ERROR",
-            "HU_INCLUDED_POWER",
-            "FLAG_CH_HEATING",              # Central heating status
-            "FLAG_DHW_HEATING",             # DHW heating status
-            "FLAG_CH_PUMP_OFF_ON",          # CH pump status
-            "FLAG_IN_RP",
+            "TEMP_ROOM", "ROOM_TEMP_SETTING", "TEMP_WATER", "WATER_TEMP_SETTING", 
+            "TEMP_OUTSIDE", "TEMP_RETURN", "FLAG_CH_HEATING", "FLAG_DHW_HEATING", 
+            "FLAG_PUMP", "HEATER_MODE", "HEATER_POWER", "ERROR_CODE"
         ]
         
         try:
@@ -290,92 +276,85 @@ class KospelAPI:
                 "Accept": "application/vnd.kospel.cmi-v1+json",
                 "Content-Type": "application/json"
             }
-            _LOGGER.info("EKD API request: POST %s", url)
-            _LOGGER.debug("EKD API headers: %s", headers)
-            _LOGGER.debug("EKD API variables (%d): %s", len(variables), variables)
+            # Try the format that matches the manufacturer's frontend
+            _LOGGER.debug("EKD API request: URL=%s, device_id=%s, variables=%s", url, self._ekd_device_id, len(variables))
             
             async with asyncio.timeout(10):
-                response = await self._session.post(
-                    url,
-                    headers=headers,
-                    json=variables
-                )
-                
-                _LOGGER.debug("EKD API response status: %d", response.status)
+                response = await self._session.post(url, headers=headers, json=variables)
                 
                 if response.status >= 400:
                     response_text = await response.text()
-                    _LOGGER.error("EKD API HTTP error %d: %s", response.status, response_text)
+                    _LOGGER.error("EKD API HTTP %s error: %s", response.status, response_text)
                     raise KospelAPIError(f"EKD API HTTP error {response.status}: {response_text}")
                 
-                data = await response.json()
-                _LOGGER.debug("EKD API response data keys: %s", list(data.keys()))
+                response_data = await response.json()
+                _LOGGER.debug("EKD API response: %s", response_data)
                 
-                regs = data.get("regs", {})
-                if not regs:
-                    _LOGGER.error("EKD API returned no 'regs' data. Full response: %s", data)
-                    return {}
+                # Check for API errors in response
+                if "status" in response_data and response_data["status"] < 0:
+                    error_msg = response_data.get("status_msg", "Unknown error")
+                    _LOGGER.error("EKD API returned error: status=%s, message=%s", response_data["status"], error_msg)
+                    
+                    # If we get WRONG_ID error, maybe try with a different device ID format
+                    if "WRONG_ID" in error_msg:
+                        _LOGGER.warning("EKD API reports wrong device ID (%s), this device may not support EKD API", self._ekd_device_id)
+                    
+                    raise KospelAPIError(f"EKD API error: {error_msg}")
                 
-                # Apply signed integer conversion like the frontend does
-                for reg_name, value in regs.items():
-                    if isinstance(value, int) and (value & 32768) > 0:
-                        regs[reg_name] = value - 65536
+                if "regs" not in response_data:
+                    _LOGGER.error("EKD API response missing 'regs' key: %s", response_data)
+                    raise KospelAPIError("EKD API returned invalid response format")
                 
-                _LOGGER.debug("Retrieved EKD data: %s", regs)
-                return regs
+                regs_data = response_data["regs"]
+                _LOGGER.info("EKD API successful: retrieved %d variables", len(regs_data))
+                
+                return regs_data
                 
         except asyncio.TimeoutError as exc:
-            raise KospelAPIError("EKD API timeout") from exc
+            _LOGGER.error("EKD API timeout")
+            raise KospelAPIError("EKD API request timeout") from exc
         except (aiohttp.ClientError, json.JSONDecodeError) as exc:
-            raise KospelAPIError(f"EKD API request failed: {exc}") from exc
+            _LOGGER.error("EKD API communication error: %s", exc)
+            raise KospelAPIError("EKD API communication failed") from exc
 
     def _parse_ekd_status(self, ekd_data: dict[str, Any]) -> dict[str, Any]:
         """Parse status data from EKD API response."""
-        try:
-            # Parse temperature values - EKD API returns values in 0.1°C resolution
-            def parse_ekd_temp(value):
-                if value is None or value == 0xFFFF or value == -1:
-                    return None
-                return float(value) / 10.0
+        # Apply signed integer conversion like the frontend does
+        processed_data = {}
+        for reg_name, value in ekd_data.items():
+            if isinstance(value, int) and (value & 32768) > 0:
+                processed_data[reg_name] = value - 65536
+            else:
+                processed_data[reg_name] = value
+        
+        _LOGGER.debug("EKD data after signed conversion: %s", processed_data)
+        
+        # Parse the status based on available variables
+        status = {
+            # Temperature sensors (divide by 10 for 0.1°C resolution)
+            "current_temperature": processed_data.get("TEMP_ROOM", 0) / 10.0 if processed_data.get("TEMP_ROOM") is not None else None,
+            "target_temperature_co": processed_data.get("ROOM_TEMP_SETTING", 0) / 10.0 if processed_data.get("ROOM_TEMP_SETTING") is not None else None,
+            "water_temperature": processed_data.get("TEMP_WATER", 0) / 10.0 if processed_data.get("TEMP_WATER") is not None else None,
+            "target_temperature_cwu": processed_data.get("WATER_TEMP_SETTING", 0) / 10.0 if processed_data.get("WATER_TEMP_SETTING") is not None else None,
+            "outside_temperature": processed_data.get("TEMP_OUTSIDE", 0) / 10.0 if processed_data.get("TEMP_OUTSIDE") is not None else None,
+            "return_temperature": processed_data.get("TEMP_RETURN", 0) / 10.0 if processed_data.get("TEMP_RETURN") is not None else None,
             
-            # Parse boolean flags
-            def parse_ekd_flag(value):
-                if value is None:
-                    return False
-                return bool(value)
+            # Boolean flags
+            "heater_running": bool(processed_data.get("FLAG_CH_HEATING", 0)),
+            "water_heating": bool(processed_data.get("FLAG_DHW_HEATING", 0)),
+            "pump_running": bool(processed_data.get("FLAG_PUMP", 0)),
             
-            status_data = {
-                # Temperature readings (direct from EKD API names)
-                "current_temperature": parse_ekd_temp(ekd_data.get("TEMP_ROOM")),
-                "target_temperature_co": parse_ekd_temp(ekd_data.get("ROOM_TEMP_SETTING")),
-                "target_temperature_cwu": parse_ekd_temp(ekd_data.get("DHW_TEMP_SETTING")),
-                "water_temperature": parse_ekd_temp(ekd_data.get("DHW_SUPPLY_TEMP")),
-                "outside_temperature": parse_ekd_temp(ekd_data.get("TEMP_EXT")),
-                "return_temperature": None,  # Not available in EKD API
-                
-                # Status indicators (using EKD flags)
-                "heater_running": parse_ekd_flag(ekd_data.get("FLAG_CH_HEATING")),
-                "water_heating": parse_ekd_flag(ekd_data.get("FLAG_DHW_HEATING")),
-                "pump_running": parse_ekd_flag(ekd_data.get("FLAG_CH_PUMP_OFF_ON")),
-                
-                # Operating parameters
-                "mode": self._parse_ekd_mode(ekd_data.get("OPERATING_MODE")),
-                "power": ekd_data.get("HU_INCLUDED_POWER"),
-                "error_code": 0,  # Parse from error flags if needed
-                
-                # Use CO temperature as primary target for Home Assistant
-                "target_temperature": parse_ekd_temp(ekd_data.get("ROOM_TEMP_SETTING")),
-                
-                "last_update": asyncio.get_event_loop().time(),
-                "raw_ekd_data": ekd_data,  # Include raw EKD data for debugging
-            }
+            # Mode and power
+            "mode": self._parse_ekd_mode(processed_data.get("HEATER_MODE")),
+            "power": processed_data.get("HEATER_POWER", 0),
+            "error_code": processed_data.get("ERROR_CODE", 0),
             
-            _LOGGER.info("Parsed EKD status data: %s", {k: v for k, v in status_data.items() if k != "raw_ekd_data"})
-            return status_data
-            
-        except Exception as exc:
-            _LOGGER.error("Failed to parse EKD status: %s", exc)
-            raise KospelAPIError("Failed to parse EKD status") from exc
+            # Raw EKD data for debugging
+            "ekd_raw_data": processed_data
+        }
+        
+        _LOGGER.debug("Parsed EKD status: %s", {k: v for k, v in status.items() if k != "ekd_raw_data"})
+        return status
 
     def _parse_ekd_mode(self, mode_value: int | None) -> str:
         """Parse operating mode from EKD API value."""
