@@ -26,6 +26,8 @@ class KospelDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         port: int = 80,
         username: str | None = None,
         password: str | None = None,
+        device_id: str | None = None,
+        device_type: str | None = None,
     ) -> None:
         """Initialize the coordinator."""
         super().__init__(
@@ -43,6 +45,8 @@ class KospelDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             port=port,
             username=username,
             password=password,
+            device_id=device_id,
+            device_type=device_type,
         )
         
         self.host = host

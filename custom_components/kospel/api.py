@@ -34,6 +34,8 @@ class KospelAPI:
         port: int = 80,
         username: str | None = None,
         password: str | None = None,
+        device_id: str | None = None,
+        device_type: str | None = None,
     ) -> None:
         """Initialize the API client."""
         self._session = session
@@ -42,15 +44,16 @@ class KospelAPI:
         self._username = username
         self._password = password
         self._base_url = f"http://{host}:{port}"
-        self._device_id = None
-        self._device_type = None
+        self._device_id = device_id
+        self._device_type = device_type
         self._ekd_device_id = None
 
     async def test_connection(self) -> bool:
         """Test connection to the device and discover device IDs."""
         try:
-            # Discover device ID for legacy API (used for initial discovery)
-            await self._discover_device_id()
+            # If device is not configured, discover it first
+            if not self._device_id or not self._device_type:
+                await self._discover_device_id()
             
             # Try comprehensive EKD session discovery
             await self._discover_ekd_device_id()
@@ -197,6 +200,68 @@ class KospelAPI:
         except (aiohttp.ClientError, json.JSONDecodeError) as exc:
             _LOGGER.error("Device discovery failed: %s", exc)
             raise KospelConnectionError("Unable to discover device") from exc
+
+    async def get_available_devices(self) -> list[dict[str, Any]]:
+        """Get list of available devices for configuration."""
+        try:
+            async with asyncio.timeout(10):
+                response = await self._session.get(f"{self._base_url}/api/dev")
+                
+                if response.status >= 400:
+                    raise KospelConnectionError(f"Device API HTTP error {response.status}")
+                
+                data = await response.json()
+                
+                if not data or "devs" not in data:
+                    return []
+                
+                devices = data["devs"]
+                available_devices = []
+                
+                # Device type names for user-friendly display
+                device_type_names = {
+                    18: "EKD.M3 Electric Heater",
+                    19: "EKCO.M3 Electric Heater", 
+                    65: "C.MG3 Gas Heater",
+                    81: "C.MW3 Water Heater",
+                    254: "C.MI Controller"
+                }
+                
+                for dev_id, device_info in devices.items():
+                    device_type = int(dev_id)
+                    
+                    # Skip CMI controller (254) as it's not a heater
+                    if device_type == 254:
+                        continue
+                    
+                    device_id = device_info.get("moduleID", dev_id)
+                    type_name = device_type_names.get(device_type, f"Unknown Device (Type {device_type})")
+                    
+                    # Create device name with module number if available
+                    if device_type != 254:
+                        module_number = int(device_id) - 100 if isinstance(device_id, (int, str)) and int(device_id) > 100 else device_id
+                        device_name = f"{type_name} ({module_number})"
+                    else:
+                        device_name = type_name
+                    
+                    available_devices.append({
+                        "key": f"{device_type}_{device_id}",
+                        "device_id": str(device_id),
+                        "device_type": str(device_type),
+                        "name": device_name,
+                        "type_name": type_name,
+                        "module_number": module_number if device_type != 254 else None
+                    })
+                
+                _LOGGER.info("Found %d available devices", len(available_devices))
+                return available_devices
+                
+        except asyncio.TimeoutError as exc:
+            _LOGGER.error("Device discovery timeout")
+            raise KospelConnectionError("Device discovery timeout") from exc
+        except (aiohttp.ClientError, json.JSONDecodeError) as exc:
+            _LOGGER.error("Device discovery failed: %s", exc)
+            raise KospelConnectionError("Unable to discover devices") from exc
 
     async def _discover_ekd_device_id(self) -> None:
         """Discover EKD device ID using the sessionDevice endpoint."""
