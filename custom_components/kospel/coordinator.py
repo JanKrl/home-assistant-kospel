@@ -26,6 +26,8 @@ class KospelDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         port: int = 80,
         username: str | None = None,
         password: str | None = None,
+        device_id: str | None = None,
+        device_type: str | None = None,
     ) -> None:
         """Initialize the coordinator."""
         super().__init__(
@@ -43,6 +45,8 @@ class KospelDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             port=port,
             username=username,
             password=password,
+            device_id=device_id,
+            device_type=device_type,
         )
         
         self.host = host
@@ -58,22 +62,27 @@ class KospelDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise
 
     async def _async_update_data(self) -> dict[str, Any]:
-        """Fetch data from API endpoint."""
+        """Fetch data from the device."""
         try:
-            # Get status data - this contains all the sensor data we need
+            # Get device status via EKD API
             status_data = await self.api.get_status()
             
-            # Return the status data directly (flattened structure for sensors)
-            # The sensors expect the data structure to be flat, not nested under "status"
-            _LOGGER.debug("Successfully updated data from coordinator")
+            # Update the last successful update time
+            status_data["last_update"] = dt_util.utcnow()
+            
+            _LOGGER.debug("Data update successful, got %d data points", len(status_data))
             return status_data
             
-        except KospelAPIError as exc:
-            _LOGGER.error("Error communicating with Kospel device: %s", exc)
-            raise UpdateFailed(f"Error communicating with Kospel device: {exc}") from exc
         except Exception as exc:
-            _LOGGER.exception("Unexpected error during data update")
-            raise UpdateFailed(f"Unexpected error: {exc}") from exc
+            _LOGGER.error("Error communicating with Kospel device: %s", exc)
+            
+            # Check if we need to handle session issues
+            if hasattr(self.api, '_handle_session_error'):
+                session_recovered = await self.api._handle_session_error(str(exc))
+                if session_recovered:
+                    _LOGGER.info("Session recovered, will retry on next update cycle")
+            
+            raise UpdateFailed(f"Error communicating with Kospel device: {exc}") from exc
 
     async def async_set_temperature(self, temperature: float) -> None:
         """Set target temperature."""

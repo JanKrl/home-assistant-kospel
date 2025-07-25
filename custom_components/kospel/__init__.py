@@ -8,6 +8,7 @@ from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN, DEFAULT_PORT
 from .coordinator import KospelDataUpdateCoordinator
+from .config_flow import CONF_DEVICE_ID, CONF_DEVICE_TYPE, CONF_DEVICE_NAME
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -20,14 +21,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     hass.data.setdefault(DOMAIN, {})
     
-    # Create data update coordinator
+    # Create data update coordinator with device selection
     coordinator = KospelDataUpdateCoordinator(
         hass=hass,
         host=entry.data[CONF_HOST],
         port=entry.data.get(CONF_PORT, DEFAULT_PORT),
         username=entry.data.get(CONF_USERNAME),
         password=entry.data.get(CONF_PASSWORD),
+        device_id=entry.data.get(CONF_DEVICE_ID),
+        device_type=entry.data.get(CONF_DEVICE_TYPE),
     )
+    
+    # Log selected device info
+    device_name = entry.data.get(CONF_DEVICE_NAME, "Unknown Device")
+    device_id = entry.data.get(CONF_DEVICE_ID, "Unknown")
+    device_type = entry.data.get(CONF_DEVICE_TYPE, "Unknown")
+    
+    _LOGGER.info("Setting up %s (ID: %s, Type: %s)", device_name, device_id, device_type)
     
     # Test connection before first refresh to ensure device discovery works
     try:
