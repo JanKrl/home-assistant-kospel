@@ -20,10 +20,6 @@ class KospelConnectionError(KospelAPIError):
     """Exception to indicate a connection error."""
 
 
-class KospelAuthError(KospelAPIError):
-    """Exception to indicate an authentication error."""
-
-
 class KospelAPI:
     """API client for Kospel electric heaters using REST API."""
 
@@ -45,8 +41,6 @@ class KospelAPI:
         self._device_type = device_type
         self._debug_logging = debug_logging
         self._ekd_device_id = None
-        self._session_established = False
-        self._last_session_time = None
         
         # Set logger level based on debug configuration
         if self._debug_logging:
@@ -63,21 +57,10 @@ class KospelAPI:
         _LOGGER.debug("Current device_id: %s, device_type: %s", self._device_id, self._device_type)
         
         try:
-            # If device is not configured, discover it first
-            if not self._device_id or not self._device_type:
-                _LOGGER.debug("Device not configured, starting device discovery")
-                await self._discover_device_id()
+            # Ensure device is discovered
+            await self._ensure_connection()
             
-            # Try comprehensive EKD session discovery
-            _LOGGER.debug("Starting EKD device ID discovery")
-            await self._discover_ekd_device_id()
-            
-            # Test if EKD API endpoint exists
-            _LOGGER.debug("Testing EKD API endpoint availability")
-            if not await self._test_ekd_endpoint():
-                raise KospelAPIError("Device does not support EKD API - please check device firmware version")
-            
-            # Test EKD API access with full variable set
+            # Test EKD API access
             _LOGGER.debug("Testing EKD API data retrieval")
             ekd_data = await self._get_ekd_data()
             if not ekd_data:
@@ -101,49 +84,31 @@ class KospelAPI:
 
     async def get_status(self) -> dict[str, Any]:
         """Get current status from the heater."""
-        max_retries = 2
-        
-        for attempt in range(max_retries):
-            try:
-                # Ensure we have a valid session before making API calls
-                if not await self._ensure_valid_session():
-                    raise KospelAPIError("Failed to establish valid session")
+        try:
+            # Ensure we have a valid connection
+            await self._ensure_connection()
 
-                # Use EKD API exclusively - this is the manufacturer's preferred method
-                _LOGGER.debug("Retrieving data via EKD API (attempt %d/%d)...", attempt + 1, max_retries)
-                
-                ekd_data = await self._get_ekd_data()
-                
-                if not ekd_data:
-                    raise KospelAPIError("EKD API returned empty data - device may not support EKD API")
-                
-                # Parse the EKD data into status format
-                status_data = self._parse_ekd_status(ekd_data)
-                
-                _LOGGER.debug("Successfully retrieved status data with %d variables", len(ekd_data))
-                return status_data
-                
-            except Exception as exc:
-                _LOGGER.error("Failed to get status (attempt %d/%d): %s", attempt + 1, max_retries, exc)
-                
-                # Check if this is a session-related error and try to recover
-                if attempt < max_retries - 1:  # Don't retry on last attempt
-                    if await self._handle_session_error(str(exc)):
-                        _LOGGER.info("Session re-established, retrying...")
-                        continue
-                
-                # If we've exhausted retries or can't handle the error, re-raise
-                if attempt == max_retries - 1:
-                    raise KospelAPIError("Failed to get device status after all retries") from exc
+            # Use EKD API - this is the manufacturer's preferred method
+            _LOGGER.debug("Retrieving data via EKD API...")
+            
+            ekd_data = await self._get_ekd_data()
+            
+            if not ekd_data:
+                raise KospelAPIError("EKD API returned empty data - device may not support EKD API")
+            
+            # Parse the EKD data into status format
+            status_data = self._parse_ekd_status(ekd_data)
+            
+            _LOGGER.debug("Successfully retrieved status data with %d variables", len(ekd_data))
+            return status_data
+            
+        except Exception as exc:
+            _LOGGER.error("Failed to get status: %s", exc)
+            raise KospelAPIError("Failed to get device status") from exc
 
     async def get_settings(self) -> dict[str, Any]:
         """Get current settings from the heater."""
         try:
-            # Ensure device ID is discovered before attempting to get settings
-            if not self._device_id:
-                _LOGGER.debug("Device ID not yet discovered, attempting discovery...")
-                await self._discover_device_id()
-                
             status = await self.get_status()
             
             return {
@@ -179,72 +144,6 @@ class KospelAPI:
         except Exception as exc:
             _LOGGER.error("Failed to set mode: %s", exc)
             raise KospelAPIError("Failed to set mode") from exc
-
-    async def _discover_device_id(self) -> None:
-        """Discover device ID by calling the device API."""
-        _LOGGER.debug("Starting device ID discovery")
-        _LOGGER.debug("Calling API endpoint: %s/api/dev", self._base_url)
-        
-        try:
-            async with asyncio.timeout(10):
-                response = await self._session.get(f"{self._base_url}/api/dev")
-                
-                _LOGGER.debug("Device API response status: %s", response.status)
-                
-                if response.status >= 400:
-                    raise KospelConnectionError(f"Device API HTTP error {response.status}")
-                
-                data = await response.json()
-                
-                _LOGGER.debug("Device API response data: %s", data)
-                
-                if not data or "devs" not in data:
-                    raise KospelConnectionError("Device API returned no device data")
-                
-                devices = data["devs"]
-                _LOGGER.debug("API returned devices data type: %s, content: %s", type(devices), devices)
-                
-                if not devices:
-                    raise KospelConnectionError("No devices found in response")
-                
-                # Find the first available device (excluding device 254 which is CMI)
-                device_id = None
-                device_type = None
-                
-                # Handle both dictionary and list responses from the API
-                if isinstance(devices, dict):
-                    # Dictionary format: {dev_id: device_info, ...}
-                    for dev_id, device_info in devices.items():
-                        if int(dev_id) != 254:  # Skip CMI device
-                            device_id = device_info.get("moduleID", dev_id)
-                            device_type = dev_id
-                            _LOGGER.info("Found device: ID=%s, Type=%s, ModuleID=%s", dev_id, device_type, device_id)
-                            break
-                elif isinstance(devices, list):
-                    # List format: [device_info, ...] - assume first device
-                    if devices:
-                        device_info = devices[0]
-                        device_id = device_info.get("moduleID", device_info.get("id"))
-                        device_type = device_info.get("type", "unknown")
-                        _LOGGER.info("Found device: ID=%s, Type=%s, ModuleID=%s", device_type, device_type, device_id)
-                else:
-                    raise KospelConnectionError(f"Unexpected devices format: {type(devices)}")
-                
-                if device_id is None:
-                    raise KospelConnectionError("No suitable devices found")
-                
-                # Store both device ID and type for session establishment
-                self._device_id = device_id
-                self._device_type = device_type
-                
-                _LOGGER.info("Discovered device ID: %s (type: %s)", device_id, device_type)
-                
-        except asyncio.TimeoutError as exc:
-            _LOGGER.error("Device discovery timeout")
-            raise KospelConnectionError("Device discovery timeout") from exc
-        except (aiohttp.ClientError, json.JSONDecodeError) as exc:
-            _LOGGER.error("Device discovery failed: %s", exc)
-            raise KospelConnectionError("Unable to discover device") from exc
 
     async def get_available_devices(self) -> list[dict[str, Any]]:
         """Get list of available devices for configuration."""
@@ -342,197 +241,83 @@ class KospelAPI:
             _LOGGER.error("Device discovery failed: %s", exc)
             raise KospelConnectionError("Unable to discover devices") from exc
 
-    async def _discover_ekd_device_id(self) -> None:
-        """Discover EKD device ID using the sessionDevice endpoint."""
-        # Use the new session establishment method
-        if await self._establish_full_session():
-            _LOGGER.debug("EKD device ID discovery completed via session management")
-        else:
-            raise KospelConnectionError("Failed to establish session for EKD device ID discovery")
-
-    async def _get_existing_session(self) -> str | None:
-        """Get existing session device ID (equivalent to getSessionDevice())."""
-        try:
-            # Use exact timeout from manufacturer's code (5000ms)
-            async with asyncio.timeout(5):
-                response = await self._session.get(
-                    f"{self._base_url}/api/sessionDevice",
-                    headers={
-                        "Accept": "application/vnd.kospel.cmi-v1+json"
-                    }
-                )
-                
-                _LOGGER.debug("getSessionDevice response status: %s", response.status)
-                
-                if response.status >= 400:
-                    response_text = await response.text()
-                    _LOGGER.debug("getSessionDevice HTTP error %s: %s", response.status, response_text)
-                    return None
-                
-                data = await response.json()
-                _LOGGER.debug("getSessionDevice response data: %s", data)
-                
-                if "sessionDevice" not in data:
-                    _LOGGER.debug("getSessionDevice: no sessionDevice in response")
-                    return None
-                
-                session_device_id = data["sessionDevice"]
-                _LOGGER.debug("getSessionDevice returned: %s", session_device_id)
-                return session_device_id
-                
-        except Exception as exc:
-            _LOGGER.debug("getSessionDevice failed: %s", exc)
-            return None
-
-    async def _establish_session(self) -> bool:
-        """Try to establish a session by various methods."""
+    async def _ensure_connection(self) -> bool:
+        """Ensure device is discovered and connection is ready."""
         if not self._device_id or not self._device_type:
-            return False
-            
-        # Method 1: Call selectModule (this is what the UI does!)
-        if await self._select_module():
-            _LOGGER.debug("Successfully established session via selectModule")
-            return True
-            
-        # Method 2: Try setting session with regular device ID
-        if await self._set_session_device(self._device_id):
-            _LOGGER.debug("Successfully set session with regular device ID")
-            return True
-            
-        # Method 3: Try with device ID as string
-        if await self._set_session_device(str(self._device_id)):
-            _LOGGER.debug("Successfully set session with device ID as string")
-            return True
-            
-        # Method 4: Try visiting the web interface first (might auto-establish session)
-        if await self._initialize_web_session():
-            _LOGGER.debug("Successfully initialized web session")
-            return True
-            
-        _LOGGER.debug("All session establishment methods failed")
-        return False
-
-    async def _select_module(self) -> bool:
-        """Select module/device to establish session (equivalent to loadModule())."""
-        try:
-            _LOGGER.debug("Attempting selectModule with ID: %s, devType: %s", self._device_id, self._device_type)
-            
-            async with asyncio.timeout(10):
-                response = await self._session.post(
-                    f"{self._base_url}/api/selectModule",
-                    data={
-                        "id": str(self._device_id),
-                        "devType": str(self._device_type)
-                    }
-                )
-                
-                _LOGGER.debug("selectModule response status: %s", response.status)
-                
-                if response.status >= 400:
-                    response_text = await response.text()
-                    _LOGGER.debug("selectModule HTTP error %s: %s", response.status, response_text)
-                    return False
-                
-                data = await response.json()
-                _LOGGER.debug("selectModule response data: %s", data)
-                
-                # Check if module selection was successful
-                if data.get("status") == 0:
-                    _LOGGER.info("Module selection successful - session should be established")
-                    return True
-                else:
-                    _LOGGER.warning("Module selection failed: status=%s", data.get("status"))
-                    return False
-                    
-        except Exception as exc:
-            _LOGGER.debug("selectModule failed: %s", exc)
-            return False
-
-    async def _set_session_device(self, device_id: str | int) -> bool:
-        """Set session device ID (equivalent to part of unSetSessionDevice())."""
-        try:
-            _LOGGER.debug("Attempting to set session device ID: %s", device_id)
-            
-            async with asyncio.timeout(5):
-                response = await self._session.post(
-                    f"{self._base_url}/api/sessionDevice",
-                    headers={
-                        "Accept": "application/vnd.kospel.cmi-v1+json",
-                        "Content-Type": "text/plain"
-                    },
-                    data=str(device_id)
-                )
-                
-                _LOGGER.debug("setSessionDevice response status: %s", response.status)
-                
-                if response.status < 400:
-                    _LOGGER.debug("Session establishment successful")
-                    return True
-                else:
-                    response_text = await response.text()
-                    _LOGGER.debug("Session establishment failed: %s - %s", response.status, response_text)
-                    return False
-                    
-        except Exception as exc:
-            _LOGGER.debug("Session establishment exception: %s", exc)
-            return False
-
-    async def _initialize_web_session(self) -> bool:
-        """Try to initialize session by visiting the main web interface."""
-        try:
-            _LOGGER.debug("Attempting to initialize web session")
-            
-            async with asyncio.timeout(10):
-                # Try to access the main web interface (this might auto-establish a session)
-                response = await self._session.get(
-                    f"{self._base_url}/",
-                    headers={
-                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                        "User-Agent": "Mozilla/5.0 (compatible; Home Assistant Kospel Integration)"
-                    }
-                )
-                
-                _LOGGER.debug("Web interface response status: %s", response.status)
-                
-                if response.status < 400:
-                    _LOGGER.debug("Web interface accessible - session might be established")
-                    return True
-                else:
-                    return False
-                    
-        except Exception as exc:
-            _LOGGER.debug("Web session initialization failed: %s", exc)
-            return False
-
-
-
-    async def _test_ekd_endpoint(self) -> bool:
-        """Test if the EKD API endpoint exists on this device."""
+            _LOGGER.debug("Device not configured, starting device discovery")
+            await self._discover_device_id()
+        
         if not self._ekd_device_id:
-            return False
+            _LOGGER.debug("EKD device ID not set, using regular device ID")
+            self._ekd_device_id = self._device_id
+        
+        return True
+
+    async def _discover_device_id(self) -> None:
+        """Discover device ID by calling the device API."""
+        _LOGGER.debug("Starting device ID discovery")
+        _LOGGER.debug("Calling API endpoint: %s/api/dev", self._base_url)
         
         try:
-            # Try a simple test with minimal variables
-            test_url = f"{self._base_url}/api/ekd/read/{self._ekd_device_id}"
-            test_variables = ["TEMP_ROOM"]  # Just test with one common variable
-            
-            async with asyncio.timeout(5):
-                response = await self._session.post(
-                    test_url,
-                    headers={"Accept": "application/vnd.kospel.cmi-v1+json", "Content-Type": "application/json"},
-                    json=test_variables
-                )
+            async with asyncio.timeout(10):
+                response = await self._session.get(f"{self._base_url}/api/dev")
                 
-                # If we get anything other than 404, the endpoint exists
-                if response.status == 404:
-                    _LOGGER.warning("EKD API endpoint not found (404) - device may not support EKD API")
-                    return False
+                _LOGGER.debug("Device API response status: %s", response.status)
                 
-                return True
+                if response.status >= 400:
+                    raise KospelConnectionError(f"Device API HTTP error {response.status}")
                 
-        except Exception as exc:
-            _LOGGER.debug("EKD endpoint test failed: %s", exc)
-            return False
+                data = await response.json()
+                
+                _LOGGER.debug("Device API response data: %s", data)
+                
+                if not data or "devs" not in data:
+                    raise KospelConnectionError("Device API returned no device data")
+                
+                devices = data["devs"]
+                _LOGGER.debug("API returned devices data type: %s, content: %s", type(devices), devices)
+                
+                if not devices:
+                    raise KospelConnectionError("No devices found in response")
+                
+                # Find the first available device (excluding device 254 which is CMI)
+                device_id = None
+                device_type = None
+                
+                # Handle both dictionary and list responses from the API
+                if isinstance(devices, dict):
+                    # Dictionary format: {dev_id: device_info, ...}
+                    for dev_id, device_info in devices.items():
+                        if int(dev_id) != 254:  # Skip CMI device
+                            device_id = device_info.get("moduleID", dev_id)
+                            device_type = dev_id
+                            _LOGGER.info("Found device: ID=%s, Type=%s, ModuleID=%s", dev_id, device_type, device_id)
+                            break
+                elif isinstance(devices, list):
+                    # List format: [device_info, ...] - assume first device
+                    if devices:
+                        device_info = devices[0]
+                        device_id = device_info.get("moduleID", device_info.get("id"))
+                        device_type = device_info.get("type", "unknown")
+                        _LOGGER.info("Found device: ID=%s, Type=%s, ModuleID=%s", device_type, device_type, device_id)
+                else:
+                    raise KospelConnectionError(f"Unexpected devices format: {type(devices)}")
+                
+                if device_id is None:
+                    raise KospelConnectionError("No suitable devices found")
+                
+                # Store both device ID and type
+                self._device_id = device_id
+                self._device_type = device_type
+                
+                _LOGGER.info("Discovered device ID: %s (type: %s)", device_id, device_type)
+                
+        except asyncio.TimeoutError as exc:
+            _LOGGER.error("Device discovery timeout")
+            raise KospelConnectionError("Device discovery timeout") from exc
+        except (aiohttp.ClientError, json.JSONDecodeError) as exc:
+            _LOGGER.error("Device discovery failed: %s", exc)
+            raise KospelConnectionError("Unable to discover device") from exc
 
     async def _get_ekd_data(self) -> dict[str, Any]:
         """Get data using the EKD API (manufacturer's preferred method)."""
@@ -552,7 +337,7 @@ class KospelAPI:
                 "Accept": "application/vnd.kospel.cmi-v1+json",
                 "Content-Type": "application/json"
             }
-            # Try the format that matches the manufacturer's frontend
+            
             _LOGGER.debug("EKD API request: URL=%s, device_id=%s, variables=%s", url, self._ekd_device_id, len(variables))
             
             async with asyncio.timeout(10):
@@ -570,12 +355,7 @@ class KospelAPI:
                 if "status" in response_data and response_data["status"] < 0:
                     error_msg = response_data.get("status_msg", "Unknown error")
                     _LOGGER.error("EKD API returned error: status=%s, message=%s", response_data["status"], error_msg)
-                    
-                    # Raise specific error messages that can be caught by session handler
-                    if "WRONG_ID" in error_msg:
-                        raise KospelAPIError(f"EKD API device ID error: {error_msg}")
-                    else:
-                        raise KospelAPIError(f"EKD API error: {error_msg}")
+                    raise KospelAPIError(f"EKD API error: {error_msg}")
                 
                 if "regs" not in response_data:
                     _LOGGER.error("EKD API response missing 'regs' key: %s", response_data)
@@ -609,7 +389,7 @@ class KospelAPI:
         status = {
             # Temperature sensors (divide by 10 for 0.1°C resolution)
             "current_temperature": processed_data.get("TEMP_ROOM", 0) / 10.0 if processed_data.get("TEMP_ROOM") is not None else None,
-            "target_temperature_co": processed_data.get("ROOM_TEMP_SETTING", 0) / 10.0 if processed_data.get("ROOM_TEMP_SETTING") is not None else None,
+            "target_temperature": processed_data.get("ROOM_TEMP_SETTING", 0) / 10.0 if processed_data.get("ROOM_TEMP_SETTING") is not None else None,
             "water_temperature": processed_data.get("TEMP_WATER", 0) / 10.0 if processed_data.get("TEMP_WATER") is not None else None,
             "target_temperature_cwu": processed_data.get("WATER_TEMP_SETTING", 0) / 10.0 if processed_data.get("WATER_TEMP_SETTING") is not None else None,
             "outside_temperature": processed_data.get("TEMP_OUTSIDE", 0) / 10.0 if processed_data.get("TEMP_OUTSIDE") is not None else None,
@@ -649,123 +429,7 @@ class KospelAPI:
         
         return mode_map.get(mode_value, f"mode_{mode_value}")
 
-
-
-
-
-
-
-
-
     async def close(self) -> None:
         """Close the HTTP session."""
         # Session is managed by Home Assistant, don't close it
         pass
-
-    async def _ensure_valid_session(self) -> bool:
-        """Ensure we have a valid session, re-establish if needed."""
-        import time
-        
-        current_time = time.time()
-        
-        # Check if session might be expired (30 minutes is a common timeout)
-        session_age = None
-        if self._last_session_time:
-            session_age = current_time - self._last_session_time
-            
-        # Re-establish session if:
-        # 1. Never established
-        # 2. Older than 25 minutes (proactive refresh)
-        # 3. Previous session check failed
-        if (not self._session_established or 
-            (session_age and session_age > 1500) or  # 25 minutes
-            not await self._check_session_validity()):
-            
-            _LOGGER.debug("Session invalid or expired, re-establishing...")
-            return await self._establish_full_session()
-        
-        return True
-
-    async def _check_session_validity(self) -> bool:
-        """Check if current session is still valid."""
-        try:
-            # Try to get session device ID - if this fails, session is invalid
-            session_id = await self._get_existing_session()
-            
-            # Valid session should return a real device ID (not -1 or None)
-            if session_id and session_id != -1 and session_id != "-1":
-                _LOGGER.debug("Session validation successful: %s", session_id)
-                return True
-            else:
-                _LOGGER.debug("Session validation failed: invalid session ID")
-                return False
-                
-        except Exception as exc:
-            _LOGGER.debug("Session validation failed: %s", exc)
-            return False
-
-    async def _establish_full_session(self) -> bool:
-        """Establish complete session from scratch."""
-        import time
-        
-        _LOGGER.debug("Starting full session establishment")
-        _LOGGER.debug("Current state: device_id=%s, device_type=%s", self._device_id, self._device_type)
-        
-        try:
-            # Reset session state
-            self._session_established = False
-            self._ekd_device_id = None
-            
-            _LOGGER.debug("Reset session state")
-            
-            # Ensure we have device info
-            if not self._device_id or not self._device_type:
-                _LOGGER.debug("Device info missing, starting device discovery")
-                await self._discover_device_id()
-            
-            # Establish session
-            _LOGGER.debug("Attempting to establish session")
-            if await self._establish_session():
-                _LOGGER.debug("Session establishment successful, getting session ID")
-                # Get the session device ID
-                session_id = await self._get_existing_session()
-                _LOGGER.debug("Retrieved session ID: %s", session_id)
-                if session_id and session_id != -1 and session_id != "-1":
-                    self._ekd_device_id = session_id
-                    self._session_established = True
-                    self._last_session_time = time.time()
-                    _LOGGER.info("Session fully established: device_id=%s, session_id=%s", 
-                               self._device_id, self._ekd_device_id)
-                    _LOGGER.debug("Session establishment completed successfully")
-                    return True
-            
-            # Fallback: use regular device ID
-            _LOGGER.warning("Failed to establish session, using fallback device ID")
-            _LOGGER.debug("Using fallback device ID: %s", self._device_id)
-            self._ekd_device_id = self._device_id
-            self._session_established = True  # Mark as established to avoid infinite loops
-            self._last_session_time = time.time()
-            return True
-            
-        except Exception as exc:
-            _LOGGER.error("Failed to establish session: %s", exc)
-            return False
-
-    async def _handle_session_error(self, error_msg: str) -> bool:
-        """Handle session-related errors by re-establishing session."""
-        session_errors = [
-            "WRONG_ID", "SESSION", "UNAUTHORIZED", "FORBIDDEN",
-            "500", "502", "503", "504"  # Common session timeout errors
-        ]
-        
-        # Check if error indicates session problem
-        if any(err in str(error_msg).upper() for err in session_errors):
-            _LOGGER.warning("Detected session error (%s), attempting re-establishment", error_msg)
-            
-            # Mark session as invalid
-            self._session_established = False
-            
-            # Try to re-establish
-            return await self._establish_full_session()
-        
-        return False
