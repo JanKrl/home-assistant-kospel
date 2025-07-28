@@ -7,8 +7,7 @@
         "data": {
           "host": "Host",
           "port": "Port",
-          "username": "Username (optional)",
-          "password": "Password (optional)"
+          "debug_logging": "Enable debug logging"
         }
       },
       "device": {
@@ -21,7 +20,6 @@
     },
     "error": {
       "cannot_connect": "Failed to connect to the device",
-      "invalid_auth": "Invalid authentication",
       "no_devices": "No Kospel devices found on this host",
       "invalid_device": "Invalid device selection",
       "unknown": "Unexpected error occurred"
