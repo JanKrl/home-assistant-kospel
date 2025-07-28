@@ -176,6 +176,7 @@ class KospelAPI:
                     raise KospelConnectionError("Device API returned no device data")
                 
                 devices = data["devs"]
+                _LOGGER.debug("API returned devices data type: %s, content: %s", type(devices), devices)
                 
                 if not devices:
                     raise KospelConnectionError("No devices found in response")
@@ -184,12 +185,24 @@ class KospelAPI:
                 device_id = None
                 device_type = None
                 
-                for dev_id, device_info in devices.items():
-                    if int(dev_id) != 254:  # Skip CMI device
-                        device_id = device_info.get("moduleID", dev_id)
-                        device_type = dev_id
-                        _LOGGER.info("Found device: ID=%s, Type=%s, ModuleID=%s", dev_id, device_type, device_id)
-                        break
+                # Handle both dictionary and list responses from the API
+                if isinstance(devices, dict):
+                    # Dictionary format: {dev_id: device_info, ...}
+                    for dev_id, device_info in devices.items():
+                        if int(dev_id) != 254:  # Skip CMI device
+                            device_id = device_info.get("moduleID", dev_id)
+                            device_type = dev_id
+                            _LOGGER.info("Found device: ID=%s, Type=%s, ModuleID=%s", dev_id, device_type, device_id)
+                            break
+                elif isinstance(devices, list):
+                    # List format: [device_info, ...] - assume first device
+                    if devices:
+                        device_info = devices[0]
+                        device_id = device_info.get("moduleID", device_info.get("id"))
+                        device_type = device_info.get("type", "unknown")
+                        _LOGGER.info("Found device: ID=%s, Type=%s, ModuleID=%s", device_type, device_type, device_id)
+                else:
+                    raise KospelConnectionError(f"Unexpected devices format: {type(devices)}")
                 
                 if device_id is None:
                     raise KospelConnectionError("No suitable devices found")
@@ -222,6 +235,7 @@ class KospelAPI:
                     return []
                 
                 devices = data["devs"]
+                _LOGGER.debug("API returned devices data type: %s, content: %s", type(devices), devices)
                 available_devices = []
                 
                 # Device type names for user-friendly display
@@ -233,31 +247,64 @@ class KospelAPI:
                     254: "C.MI Controller"
                 }
                 
-                for dev_id, device_info in devices.items():
-                    device_type = int(dev_id)
-                    
-                    # Skip CMI controller (254) as it's not a heater
-                    if device_type == 254:
-                        continue
-                    
-                    device_id = device_info.get("moduleID", dev_id)
-                    type_name = device_type_names.get(device_type, f"Unknown Device (Type {device_type})")
-                    
-                    # Create device name with module number if available
-                    if device_type != 254:
-                        module_number = int(device_id) - 100 if isinstance(device_id, (int, str)) and int(device_id) > 100 else device_id
-                        device_name = f"{type_name} ({module_number})"
-                    else:
-                        device_name = type_name
-                    
-                    available_devices.append({
-                        "key": f"{device_type}_{device_id}",
-                        "device_id": str(device_id),
-                        "device_type": str(device_type),
-                        "name": device_name,
-                        "type_name": type_name,
-                        "module_number": module_number if device_type != 254 else None
-                    })
+                # Handle both dictionary and list responses from the API
+                if isinstance(devices, dict):
+                    # Dictionary format: {dev_id: device_info, ...} (expected format)
+                    for dev_id, device_info in devices.items():
+                        device_type = int(dev_id)
+                        
+                        # Skip CMI controller (254) as it's not a heater
+                        if device_type == 254:
+                            continue
+                        
+                        device_id = device_info.get("moduleID", dev_id)
+                        type_name = device_type_names.get(device_type, f"Unknown Device (Type {device_type})")
+                        
+                        # Create device name with module number if available
+                        if device_type != 254:
+                            module_number = int(device_id) - 100 if isinstance(device_id, (int, str)) and int(device_id) > 100 else device_id
+                            device_name = f"{type_name} ({module_number})"
+                        else:
+                            device_name = type_name
+                        
+                        available_devices.append({
+                            "key": f"{device_type}_{device_id}",
+                            "device_id": str(device_id),
+                            "device_type": str(device_type),
+                            "name": device_name,
+                            "type_name": type_name,
+                            "module_number": module_number if device_type != 254 else None
+                        })
+                elif isinstance(devices, list):
+                    # List format: [device_info, ...] (fallback for some devices)
+                    for device_info in devices:
+                        device_type = device_info.get("type", device_info.get("id"))
+                        
+                        # Skip CMI controller (254) as it's not a heater
+                        if device_type == 254:
+                            continue
+                        
+                        device_id = device_info.get("moduleID", device_info.get("id"))
+                        type_name = device_type_names.get(device_type, f"Unknown Device (Type {device_type})")
+                        
+                        # Create device name with module number if available
+                        if device_type != 254:
+                            module_number = int(device_id) - 100 if isinstance(device_id, (int, str)) and int(device_id) > 100 else device_id
+                            device_name = f"{type_name} ({module_number})"
+                        else:
+                            device_name = type_name
+                        
+                        available_devices.append({
+                            "key": f"{device_type}_{device_id}",
+                            "device_id": str(device_id),
+                            "device_type": str(device_type),
+                            "name": device_name,
+                            "type_name": type_name,
+                            "module_number": module_number if device_type != 254 else None
+                        })
+                else:
+                    _LOGGER.warning(f"Unexpected devices format: {type(devices)}")
+                    return []
                 
                 _LOGGER.info("Found %d available devices", len(available_devices))
                 return available_devices
