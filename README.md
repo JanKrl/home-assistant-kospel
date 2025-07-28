@@ -4,47 +4,27 @@
 [![GitHub release](https://img.shields.io/github/release/username/ha-kospel-integration.svg)](https://github.com/username/ha-kospel-integration/releases)
 [![GitHub license](https://img.shields.io/github/license/username/ha-kospel-integration.svg)](https://github.com/username/ha-kospel-integration/blob/main/LICENSE)
 
-> [!WARNING]
-> **🚧 UNDER ACTIVE DEVELOPMENT 🚧**
-> 
-> This integration is currently in **experimental stage** and under active development. Use at your own risk!
-> 
-> - ⚠️ **Not tested with real hardware yet**
-> - ⚠️ **Register parsing logic may be incorrect**
-> - ⚠️ **Breaking changes may occur without notice** 
-> - ⚠️ **No warranty or support guarantees**
-> 
-> **For developers and testers only!** Production use is not recommended at this time.
-
 A Home Assistant integration for Kospel electric heaters that allows you to monitor and control your heating devices via HTTP REST API using the C.MI internet module.
 
 ## Features
 
 - 🌡️ Read current temperature and settings
-- 🎯 Set target temperature
+- 🎯 Set target temperature (planned)
 - 💧 Monitor water heating status and temperature  
 - ⚡ Monitor heater running status and power consumption
 - 📊 Monitor operating modes and error codes
 - 🔄 Real-time updates via HTTP REST API
 - 🏠 Full Home Assistant integration with entities
+- 🐛 Debug logging support for troubleshooting
 
 ## Installation
-
-> [!WARNING]
-> **READ ALL WARNINGS ABOVE BEFORE INSTALLING**
-> 
-> Only install if you:
-> - Are a developer/tester
-> - Understand the risks
-> - Have Kospel C.MI hardware for testing
-> - Can troubleshoot HTTP API issues
 
 ### HACS (Recommended)
 
 1. Open HACS in your Home Assistant instance
 2. Navigate to "Integrations"
 3. Click the three dots in the top right corner and select "Custom repositories"
-4. Add `https://github.com/username/ha-kospel-integration` as repository
+4. Add `https://github.com/JanKrl/home-assistant-kospel` as repository
 5. Select "Integration" as category
 6. Click "Add"
 7. Search for "Kospel" and install
@@ -52,7 +32,7 @@ A Home Assistant integration for Kospel electric heaters that allows you to moni
 
 ### Manual Installation
 
-1. Download the latest release from the [releases page](https://github.com/username/ha-kospel-integration/releases)
+1. Download the latest release from the [releases page](https://github.com/JanKrl/home-assistant-kospel/releases)
 2. Create a directory called `kospel` in your `custom_components` folder
 3. Extract all Python files (`*.py`), `manifest.json`, `strings.json`, and `translations/` folder to `custom_components/kospel/`
 4. Restart Home Assistant
@@ -63,7 +43,7 @@ A Home Assistant integration for Kospel electric heaters that allows you to moni
 
 - Kospel electric heater with C.MI (Internet Module) installed
 - C.MI module connected to your network via Ethernet
-- Modbus TCP enabled on the C.MI module
+- HTTP REST API enabled on the C.MI module
 
 ### Setup
 
@@ -74,9 +54,8 @@ Add the integration through the Home Assistant UI:
 3. Search for "Kospel"
 4. Configure the connection:
    - **Host**: IP address of your C.MI module
-   - **Port**: Modbus TCP port (default: 502)
-   - **Slave ID**: Modbus device ID (default: 1)
-   - **Username/Password**: Optional authentication credentials
+   - **Port**: HTTP port (default: 80)
+   - **Debug Logging**: Enable for troubleshooting (optional)
 
 ## Supported Models
 
@@ -88,13 +67,12 @@ This integration is designed to work with Kospel electric heaters equipped with 
 
 ## Protocol Details
 
-The integration uses **HTTP REST API** to communicate with Kospel heaters through the C.MI internet module. The following data is monitored and controlled:
+The integration uses **HTTP REST API** to communicate with Kospel heaters through the C.MI internet module. The following data is monitored:
 
 ### Monitored Values
 - Current room temperature
-- Target temperature for CO (Central Heating)
-- Target temperature for CWU (Water Heating)
-- Water temperature
+- Target temperature for heating
+- Water heating temperature
 - Outside temperature (if available)
 - Return temperature (if available)
 - Heater running status
@@ -104,190 +82,85 @@ The integration uses **HTTP REST API** to communicate with Kospel heaters throug
 - Power consumption
 - Error codes
 
-### Controllable Settings
-- Target temperature (5°C - 35°C)
-- Operating mode
-- Water heating temperature (20°C - 60°C)
-
-## Development Status
-
-> [!CAUTION]
-> **EXPERIMENTAL SOFTWARE - USE WITH CAUTION**
-
-This integration is currently in **experimental development phase**. Implementation status:
-
-### ✅ **Completed (Theoretical)**
-- Basic project structure with HACS support
-- HTTP REST API communication protocol implementation
-- Temperature reading and control logic
-- Water heating monitoring and control logic
-- Operating mode control implementation
-- Status monitoring (heater running, power, errors)
-
-### ⚠️ **CRITICAL LIMITATIONS**
-- **NOT TESTED** with real Kospel C.MI hardware
-- **UNKNOWN** if register parsing logic is correct
-- **NO VALIDATION** of actual device communication
-- **POTENTIAL** for device damage if registers are wrong
-
-### 🚧 **In Development**
-- Hardware testing and validation
-- Register parsing verification
-- Error handling improvements
-- Advanced features and configuration options
-- Multi-zone support
-- Energy monitoring and statistics
-
-### 🎯 **Testing Needed**
-- Real Kospel C.MI hardware validation
-- Register parsing mapping verification
-- Temperature control testing
-- Water heating control testing
-- Error condition handling
-
-## Important Notes
-
-> [!IMPORTANT]
-> **DISCLAIMER: USE AT YOUR OWN RISK**
-
-⚠️ **Protocol Implementation**: The register parsing logic used in this integration is based on analysis of actual API responses. However, the interpretation of register values may not be completely accurate and might need adjustment based on your specific device behavior.
-
-⚠️ **Potential Risks**: Incorrect API commands could potentially damage your heating system. The authors are not responsible for any damage caused by using this integration.
-
-🔧 **For Developers**: If you have access to official Kospel C.MI API documentation or have successfully tested this integration, please contribute by opening issues or pull requests with correct register interpretations.
-
-📋 **Before Using**: 
-- Backup your heater settings
-- Test in a safe environment first
-- Monitor system behavior closely
-- Have alternative heating methods available
+### Planned Features
+- Target temperature control
+- Operating mode control
+- Water heating temperature control
 
 ## Troubleshooting
 
 ### Common Issues
 
-#### ❌ "Device ID not discovered yet" Error
+#### ❌ "Unable to connect to Kospel device" Error
 
-If you see this error in your logs:
-```
-ERROR (MainThread) [custom_components.kospel.api] Failed to get status: Device ID not discovered yet
-```
+If you see this error during configuration:
 
-**Solution**: This has been fixed in recent versions. The integration now automatically discovers the device ID when needed. If you still encounter this issue:
-
+**Solution**:
 1. **Check network connectivity**: Ensure Home Assistant can reach your Kospel device
 2. **Verify device IP**: Make sure the IP address in your configuration is correct
 3. **Check device status**: Ensure your Kospel C.MI module is powered on and responsive
-4. **Test manually**: Use the provided test script to verify connectivity:
-   ```bash
-   python3 test_device_discovery.py
-   ```
-   (Update the IP address in the script first)
+4. **Enable debug logging**: Check the debug logging option during configuration to get detailed logs
+5. **Check firewall**: Ensure port 80 (or your configured port) is accessible
 
-5. **Enable debug logging**: Add this to your `configuration.yaml`:
-   ```yaml
-   logger:
-     logs:
-       custom_components.kospel: debug
-   ```
+#### ❌ "No devices found" Error
 
-#### ❌ "AttributeError: type object 'SensorDeviceClass' has no attribute 'RUNNING'"
+If the integration can't discover your device:
 
-This error occurred in older versions and has been fixed by converting the running status sensors to binary sensors.
-
-**Solution**: Update to version 0.1.2 or later. The water heating and heater running sensors are now properly implemented as binary sensors.
+**Solution**:
+1. **Verify API endpoint**: Try accessing `http://[device-ip]/api/dev` in a browser
+2. **Check device compatibility**: Ensure your device supports the HTTP REST API
+3. **Enable debug logging**: This will show detailed API responses for troubleshooting
 
 #### 🔄 Integration Won't Initialize
 
-1. Remove and re-add the integration
-2. Check Home Assistant logs for specific error messages
-3. Verify your device is accessible via HTTP at `http://your-device-ip/api/dev`
+**Solution**:
+1. **Check logs**: Enable debug logging and check Home Assistant logs
+2. **Restart Home Assistant**: After installation, a restart is required
+3. **Verify configuration**: Double-check host and port settings
 
-#### 📊 Wrong Temperature Values
+### Debug Logging
 
-**Version 0.3.0+ uses exclusively the EKD API:**
-- **EKD API Only**: Removed legacy register API for cleaner, more reliable code
-- **Manufacturer Compatibility**: Uses identical data processing as the official frontend
-- **Simplified Architecture**: Single API path eliminates parsing inconsistencies
-- **Real-time Data**: Direct access to device variables with automatic conversion
+Enable debug logging during configuration to get detailed information about:
+- API requests and responses
+- Device discovery process
+- Data parsing and conversion
+- Connection status
 
-**Why EKD API Only?**
-Analysis of the manufacturer's JavaScript revealed they use the EKD API (`api/ekd/read/{device_id}`) exclusively in modern versions. The legacy register API was causing parsing issues and inconsistent values. By focusing solely on the EKD API, we ensure:
+This is very helpful for troubleshooting issues.
 
-- ✅ **100% manufacturer compatibility**
-- ✅ **Accurate temperature readings**
-- ✅ **Proper boolean status handling** 
-- ✅ **Signed integer support for negative temperatures**
-- ✅ **Simplified troubleshooting**
+## Development Status
 
-If you see incorrect values after updating to v0.3.0+:
-1. Check the **EKD API Debug Data** sensor to verify the API is active
-2. Compare EKD variable values with manufacturer frontend values
-3. Report any EKD API errors from the Home Assistant logs
+This integration is in active development. Current status:
 
-## Debugging Features (v0.1.4+)
+### ✅ **Completed**
+- Basic project structure with HACS support
+- HTTP REST API communication protocol implementation
+- Temperature reading and monitoring
+- Water heating monitoring
+- Operating mode monitoring
+- Status monitoring (heater running, power, errors)
+- Device discovery for multiple API response formats
+- Debug logging support
 
-To help identify and fix register parsing issues, the integration now includes comprehensive debugging sensors:
+### 🚧 **In Development**
+- Temperature control implementation
+- Mode control implementation
+- Advanced features and configuration options
 
-### Raw Register Sensors
-Each important register has a corresponding "Raw" diagnostic sensor that shows:
-- **Raw hex value** from the device
-- **Decimal equivalent** 
-- **High/low byte breakdown**
-- **Binary representation**
-
-Look for entities named like:
-- `Raw Current Temperature (0c1c)`
-- `Raw CO Target Temperature (0bb8)`
-- `Raw CWU Target Temperature (0bb9)`
-- etc.
-
-### All Registers Debug Sensor
-The `All Raw Registers` sensor provides:
-- **Complete register dump** as entity attributes
-- **Formatted summary** for easy copying/pasting
-- **Register count** as the main state
-
-### Debug Helper Script
-Use the included `debug_helper.py` script to:
-1. **Compare manufacturer values** with register values
-2. **Test all parsing methods** automatically  
-3. **Identify the correct interpretation** for each register
-
-```bash
-python3 debug_helper.py
-```
-
-### How to Debug Temperature Issues
-
-**New in v0.3.0**: The integration uses only the EKD API:
-- Check the **EKD API Debug Data** sensor for API status
-- If it shows "EKD API Active", all data comes directly from the manufacturer's API
-- View the sensor attributes to see all EKD variables and their values
-
-**For debugging**:
-1. **Note the manufacturer value** from the official frontend
-2. **Check the EKD Debug sensor** for the corresponding variable (e.g., `TEMP_ROOM`, `ROOM_TEMP_SETTING`)  
-3. **Compare EKD values** with manufacturer values (should match exactly)
-4. **Report EKD API errors** from Home Assistant logs if values don't match
-
-### Testing Your Setup
-
-You can verify your device connectivity by checking the Home Assistant logs:
-1. Enable debug logging for `custom_components.kospel`
-2. Restart Home Assistant
-3. Check logs for successful device discovery and register retrieval
-
-The raw register debug sensors will show "0000" values if communication fails.
+### 🎯 **Planned**
+- Multi-zone support
+- Energy monitoring and statistics
+- Automation templates
+- Performance optimizations
 
 ## Contributing
 
-Contributions are welcome! Please read the contributing guidelines and submit pull requests for any improvements.
+Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
 
 ## License
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Support
+## Disclaimer
 
-If you encounter any issues, please [open an issue](https://github.com/username/ha-kospel-integration/issues) on GitHub.
+This integration is not officially affiliated with Kospel. Use at your own risk and ensure you have proper backups of your device settings before testing.
