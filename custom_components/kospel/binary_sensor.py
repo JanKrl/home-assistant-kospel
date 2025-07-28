@@ -12,6 +12,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.helpers.entity import EntityCategory
 
 from .const import DOMAIN, MANUFACTURER
 from .coordinator import KospelDataUpdateCoordinator
@@ -53,6 +54,15 @@ class KospelBinarySensorBase(CoordinatorEntity[KospelDataUpdateCoordinator], Bin
         self._attr_unique_id = f"{config_entry.entry_id}_{sensor_type}"
 
     @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return (
+            self.coordinator.last_update_success and
+            self.coordinator.data is not None and
+            self.is_on is not None
+        )
+
+    @property
     def device_info(self) -> dict[str, Any]:
         """Return device information about this entity."""
         return {
@@ -87,10 +97,9 @@ class KospelWaterHeatingBinarySensor(KospelBinarySensorBase):
     @property
     def is_on(self) -> bool | None:
         """Return true if water heating is on."""
-        if not self.coordinator.data:
-            return None
-        
-        return self.coordinator.data.get("water_heating", False)
+        if self.coordinator.data:
+            return self.coordinator.data.get("water_heating", False)
+        return None
 
     @property
     def icon(self) -> str:
@@ -117,17 +126,16 @@ class KospelHeaterRunningBinarySensor(KospelBinarySensorBase):
     @property
     def is_on(self) -> bool | None:
         """Return true if heater is running."""
-        if not self.coordinator.data:
-            return None
-        
-        return self.coordinator.data.get("heater_running", False)
+        if self.coordinator.data:
+            return self.coordinator.data.get("heater_running", False)
+        return None
 
     @property
     def icon(self) -> str:
         """Return the icon."""
         if self.is_on:
-            return "mdi:heating-coil"
-        return "mdi:radiator-off"
+            return "mdi:fire"
+        return "mdi:fire-off"
 
 
 class KospelPumpRunningBinarySensor(KospelBinarySensorBase):
@@ -147,10 +155,9 @@ class KospelPumpRunningBinarySensor(KospelBinarySensorBase):
     @property
     def is_on(self) -> bool | None:
         """Return true if pump is running."""
-        if not self.coordinator.data:
-            return None
-        
-        return self.coordinator.data.get("pump_running", False)
+        if self.coordinator.data:
+            return self.coordinator.data.get("pump_running", False)
+        return None
 
     @property
     def icon(self) -> str:
