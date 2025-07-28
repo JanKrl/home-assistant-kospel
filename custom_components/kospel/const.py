@@ -5,6 +5,7 @@ DOMAIN = "kospel"
 # Configuration keys
 CONF_HOST = "host"
 CONF_PORT = "port"
+CONF_DEBUG_LOGGING = "debug_logging"
 
 # Default values  
 DEFAULT_PORT = 80  # HTTP default port

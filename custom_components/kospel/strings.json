@@ -6,7 +6,8 @@
         "description": "Enter the connection details for your Kospel device.",
         "data": {
           "host": "Host",
-          "port": "Port"
+          "port": "Port",
+          "debug_logging": "Enable debug logging"
         }
       },
       "device": {

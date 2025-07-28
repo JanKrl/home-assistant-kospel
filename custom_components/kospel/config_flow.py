@@ -26,6 +26,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_HOST): str,
         vol.Optional(CONF_PORT, default=DEFAULT_PORT): int,
+        vol.Optional("debug_logging", default=False): bool,
     }
 )
 
@@ -37,10 +38,19 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     """
     session = async_get_clientsession(hass)
     
+    # Enable debug logging if requested
+    debug_logging = data.get("debug_logging", False)
+    if debug_logging:
+        _LOGGER.setLevel(logging.DEBUG)
+        _LOGGER.debug("Debug logging enabled for Kospel integration")
+    else:
+        _LOGGER.setLevel(logging.INFO)
+    
     api = KospelAPI(
         session=session,
         host=data[CONF_HOST],
         port=data.get(CONF_PORT, DEFAULT_PORT),
+        debug_logging=debug_logging,
     )
     
     try:

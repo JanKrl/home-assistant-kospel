@@ -28,6 +28,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         port=entry.data.get(CONF_PORT, DEFAULT_PORT),
         device_id=entry.data.get(CONF_DEVICE_ID),
         device_type=entry.data.get(CONF_DEVICE_TYPE),
+        debug_logging=entry.data.get("debug_logging", False),
     )
     
     # Log selected device info
