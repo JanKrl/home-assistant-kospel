@@ -24,8 +24,6 @@ class KospelDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         hass: HomeAssistant,
         host: str,
         port: int = 80,
-        username: str | None = None,
-        password: str | None = None,
         device_id: str | None = None,
         device_type: str | None = None,
     ) -> None:
@@ -43,8 +41,6 @@ class KospelDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             session=session,
             host=host,
             port=port,
-            username=username,
-            password=password,
             device_id=device_id,
             device_type=device_type,
         )

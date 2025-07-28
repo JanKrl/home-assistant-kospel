@@ -5,8 +5,6 @@ DOMAIN = "kospel"
 # Configuration keys
 CONF_HOST = "host"
 CONF_PORT = "port"
-CONF_USERNAME = "username"
-CONF_PASSWORD = "password"
 
 # Default values  
 DEFAULT_PORT = 80  # HTTP default port

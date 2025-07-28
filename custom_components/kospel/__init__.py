@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform, CONF_HOST, CONF_PORT, CONF_USERNAME, CONF_PASSWORD
+from homeassistant.const import Platform, CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN, DEFAULT_PORT
@@ -26,8 +26,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass=hass,
         host=entry.data[CONF_HOST],
         port=entry.data.get(CONF_PORT, DEFAULT_PORT),
-        username=entry.data.get(CONF_USERNAME),
-        password=entry.data.get(CONF_PASSWORD),
         device_id=entry.data.get(CONF_DEVICE_ID),
         device_type=entry.data.get(CONF_DEVICE_TYPE),
     )

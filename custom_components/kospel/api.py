@@ -32,8 +32,6 @@ class KospelAPI:
         session: aiohttp.ClientSession,
         host: str,
         port: int = 80,
-        username: str | None = None,
-        password: str | None = None,
         device_id: str | None = None,
         device_type: str | None = None,
     ) -> None:
@@ -41,8 +39,6 @@ class KospelAPI:
         self._session = session
         self._host = host
         self._port = port
-        self._username = username
-        self._password = password
         self._base_url = f"http://{host}:{port}"
         self._device_id = device_id
         self._device_type = device_type
