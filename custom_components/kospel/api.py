@@ -292,23 +292,13 @@ class KospelAPI:
                 # Find the first available device (excluding device 254 which is CMI)
                 device_id = None
                 device_type = None
-                
-                # Handle both dictionary and list responses from the API
-                if isinstance(devices, dict):
-                    # Dictionary format: {dev_id: device_info, ...}
-                    for dev_id, device_info in devices.items():
-                        if int(dev_id) != 254:  # Skip CMI device
-                            device_id = device_info.get("moduleID", dev_id)
-                            device_type = dev_id
-                            _LOGGER.info("Found device: ID=%s, Type=%s, ModuleID=%s", dev_id, device_type, device_id)
-                            break
-                elif isinstance(devices, list):
+
+                # devices is a list like this: ['65']
+                if isinstance(devices, list):
                     # List format: [device_info, ...] - assume first device
-                    if devices:
-                        device_info = devices[0]
-                        device_id = device_info.get("moduleID", device_info.get("id"))
-                        device_type = device_info.get("type", "unknown")
-                        _LOGGER.info("Found device: ID=%s, Type=%s, ModuleID=%s", device_type, device_type, device_id)
+                    device_id = devices[0]
+                    device_type = device_id
+                    _LOGGER.info("Found device: ID=%s", device_id)
                 else:
                     raise KospelConnectionError(f"Unexpected devices format: {type(devices)}")
                 

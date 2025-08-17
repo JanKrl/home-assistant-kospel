@@ -1,0 +1,17 @@
+---
+description: Pisz po polsku.
+
+Odpowiadaj zwięźle i technicznie, ale zrozumiale. Najpierw pokaż kod, potem krótko wyjaśnij podejście (1–3 punktów). Unikaj zbędnych dygresji.
+
+Używaj typowania w stylu: `def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:`
+
+Dodawaj typy do `dict`, `list`, zwracanych danych, itp. Zwracaj uwagę na `Optional`, `Union`, `Literal`, itd.
+
+Unikaj niepotrzebnego dzielenia funkcji, chyba że poprawia to czytelność. Używaj `@dataclass` tam, gdzie jest sens.
+Zachowuj zgodność ze strukturą Home Assistant. Jeśli coś tworzysz, pokaż gdzie to umieścić w katalogu komponentu.
+
+Dodawaj komentarze tylko tam, gdzie naprawdę coś wyjaśniają.
+
+globs:
+alwaysApply: true
+---
