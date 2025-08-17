@@ -9,6 +9,29 @@ from typing import Any
 import aiohttp
 from homeassistant.exceptions import HomeAssistantError
 
+from .const import (
+    DEFAULT_PORT,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+    MANUFACTURER,
+    MODEL_UNKNOWN,
+    MODE_OFF,
+    MODE_HEAT,
+    MODE_AUTO,
+    MODE_ECO,
+    MODES,
+    MIN_TEMP,
+    MAX_TEMP,
+    TEMP_STEP,
+    MIN_WATER_TEMP,
+    MAX_WATER_TEMP,
+    HTTP_TIMEOUT,
+    API_DEV_ENDPOINT,
+    API_EKD_ENDPOINT,
+    API_SELECT_MODULE_ENDPOINT,
+    API_SESSION_DEVICE_ENDPOINT,
+)
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -149,7 +172,7 @@ class KospelAPI:
         """Get list of available devices for configuration."""
         try:
             async with asyncio.timeout(10):
-                response = await self._session.get(f"{self._base_url}/api/dev")
+                response = await self._session.get(f"{self._base_url}{API_DEV_ENDPOINT}")
                 
                 if response.status >= 400:
                     raise KospelConnectionError(f"Device API HTTP error {response.status}")
@@ -251,16 +274,78 @@ class KospelAPI:
             raise KospelConnectionError("Unable to discover devices") from exc
 
     async def _ensure_connection(self) -> bool:
-        """Ensure device is discovered and connection is ready."""
+        """Ensure device is discovered and session is established."""
         if not self._device_id or not self._device_type:
             _LOGGER.debug("Device not configured, starting device discovery")
             await self._discover_device_id()
         
         if not self._ekd_device_id:
-            _LOGGER.debug("EKD device ID not set, using regular device ID")
+            # Step 1: Establish session
+            if await self._establish_session():
+                # Step 2: Get the correct EKD device ID from session
+                session_device_id = await self._get_session_device_id()
+                if session_device_id:
+                    self._ekd_device_id = session_device_id
+                    _LOGGER.info("Session established, EKD device ID: %s", self._ekd_device_id)
+                    return True
+            
+            # Fallback: use device ID directly (may not work for EKD API)
             self._ekd_device_id = self._device_id
+            _LOGGER.warning("Session establishment failed, using device ID as fallback")
         
         return True
+
+    async def _establish_session(self) -> bool:
+        """Establish session using selectModule (equivalent to UI's loadModule)."""
+        try:
+            _LOGGER.debug("Establishing session with device ID: %s, type: %s", self._device_id, self._device_type)
+            
+            # This establishes the session for the device
+            response = await self._session.post(
+                f"{self._base_url}{API_SELECT_MODULE_ENDPOINT}",
+                data={"id": str(self._device_id), "devType": str(self._device_type)}
+            )
+            
+            if response.status == 200:
+                data = await response.json()
+                if data.get("status") == "0":  # Success
+                    _LOGGER.info("Session established successfully")
+                    return True
+                else:
+                    _LOGGER.warning("Session establishment failed with status: %s", data.get("status"))
+            else:
+                _LOGGER.warning("Session establishment failed with HTTP status: %s", response.status)
+            
+            return False
+        except Exception as exc:
+            _LOGGER.debug("Session establishment failed: %s", exc)
+            return False
+
+    async def _get_session_device_id(self) -> str | None:
+        """Get the session device ID (equivalent to UI's getSessionDevice)."""
+        try:
+            _LOGGER.debug("Retrieving session device ID")
+            
+            response = await self._session.get(
+                f"{self._base_url}{API_SESSION_DEVICE_ENDPOINT}",
+                headers={"Accept": "application/vnd.kospel.cmi-v1+json"}
+            )
+            
+            if response.status == 200:
+                data = await response.json()
+                session_device = data.get("sessionDevice")
+                if session_device and session_device != -1 and session_device != "-1":
+                    _LOGGER.info("Retrieved session device ID: %s", session_device)
+                    return str(session_device)
+                else:
+                    _LOGGER.warning("Invalid session device ID: %s", session_device)
+            else:
+                _LOGGER.warning("Failed to get session device ID, HTTP status: %s", response.status)
+            
+            return None
+        except Exception as exc:
+            _LOGGER.debug("Failed to get session device ID: %s", exc)
+            return None
 
     async def _discover_device_id(self) -> None:
         """Discover device ID by calling the device API."""
@@ -269,7 +354,7 @@ class KospelAPI:
         
         try:
             async with asyncio.timeout(10):
-                response = await self._session.get(f"{self._base_url}/api/dev")
+                response = await self._session.get(f"{self._base_url}{API_DEV_ENDPOINT}")
                 
                 _LOGGER.debug("Device API response status: %s", response.status)
                 
@@ -331,7 +416,7 @@ class KospelAPI:
         ]
         
         try:
-            url = f"{self._base_url}/api/ekd/read/{self._ekd_device_id}"
+            url = f"{self._base_url}{API_EKD_ENDPOINT}/{self._ekd_device_id}"
             headers = {
                 "Accept": "application/vnd.kospel.cmi-v1+json",
                 "Content-Type": "application/json"

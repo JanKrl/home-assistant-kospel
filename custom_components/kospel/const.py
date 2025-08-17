@@ -36,6 +36,8 @@ MAX_WATER_TEMP = 60
 HTTP_TIMEOUT = 10
 API_DEV_ENDPOINT = "/api/dev"
 API_EKD_ENDPOINT = "/api/ekd/read"
+API_SELECT_MODULE_ENDPOINT = "/api/selectModule"
+API_SESSION_DEVICE_ENDPOINT = "/api/sessionDevice"
 
 # Entity names
 ENTITY_HEATER = "heater"
