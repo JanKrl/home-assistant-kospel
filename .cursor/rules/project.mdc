@@ -1,0 +1,14 @@
+---
+description: Tworzę integrację do Home Assistant w języku Python. Korzystam z nowoczesnych standardów kodowania (PEP8, typowanie statyczne, asyncio). 
+Projekt powinien być zgodny ze strukturą i konwencjami Home Assistant (manifest.json, init.py, async_setup_entry, config_flow.py itd.).
+Kod powinien być asynchroniczny i oparty na asyncio. Korzystam z narzędzi takich jak `aiohttp`, `dataclasses`, `typing`, `voluptuous`.
+
+Stosuję adnotacje typów w całym kodzie. Używam `mypy` do walidacji statycznej.
+
+Zależy mi na czytelnym, modułowym kodzie z wyraźnym podziałem na logikę integracji, konfigurację i komunikację z API zewnętrznym (jeśli występuje).
+
+Kod musi być zgodny z architekturą komponentów Home Assistant: `__init__.py`, `sensor.py`, `config_flow.py`, `const.py` itd.
+
+globs:
+alwaysApply: false
+---
