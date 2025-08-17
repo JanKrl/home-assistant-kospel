@@ -203,13 +203,22 @@ class KospelAPI:
                 elif isinstance(devices, list):
                     # List format: [device_info, ...] (fallback for some devices)
                     for device_info in devices:
-                        device_type = device_info.get("type", device_info.get("id"))
+                        # Handle case where list contains device ID strings: ['65']
+                        if isinstance(device_info, str):
+                            device_type = int(device_info)
+                            device_id = device_info
+                        # Handle case where list contains device info objects: [{"id": 65, "moduleID": 65}]
+                        elif isinstance(device_info, dict):
+                            device_type = device_info.get("type", device_info.get("id"))
+                            device_id = device_info.get("moduleID", device_info.get("id"))
+                        else:
+                            _LOGGER.warning("Unexpected device info format in list: %s", type(device_info))
+                            continue
                         
                         # Skip CMI controller (254) as it's not a heater
                         if device_type == 254:
                             continue
                         
-                        device_id = device_info.get("moduleID", device_info.get("id"))
                         type_name = device_type_names.get(device_type, f"Unknown Device (Type {device_type})")
                         
                         # Create device name with module number if available
